@@ -437,8 +437,41 @@ public class PlayScreen implements Screen {
             sprinting = true;
         }
 
-        if (isMoving)
-            player.move(dx * speed * delta, dy * speed * delta);
+        if (isMoving) {
+            float mx = dx * speed * delta;
+            float my = dy * speed * delta;
+            float oldX = player.getX();
+            float oldY = player.getY();
+
+            // First move fully to update facing direction
+            player.move(mx, my);
+
+            // If colliding with furniture, resolve per-axis (slide along edges)
+            if (collidesWithFurniture(player)) {
+                // Test X-only
+                player.setX(oldX + mx);
+                player.setY(oldY);
+                boolean collideX = collidesWithFurniture(player);
+
+                // Test Y-only
+                player.setX(oldX);
+                player.setY(oldY + my);
+                boolean collideY = collidesWithFurniture(player);
+
+                // Apply results
+                if (!collideX) {
+                    player.setX(oldX + mx);
+                } else {
+                    player.setX(oldX);
+                }
+
+                if (!collideY) {
+                    player.setY(oldY + my);
+                } else {
+                    player.setY(oldY);
+                }
+            }
+        }
 
         // Stamina
         if (sprinting)
@@ -450,6 +483,37 @@ public class PlayScreen implements Screen {
             stamina = 0;
         if (stamina > STAMINA_MAX)
             stamina = STAMINA_MAX;
+    }
+
+    // ======================
+    // FURNITURE COLLISIONS
+    // ======================
+
+    private boolean collidesWithFurniture(Player p) {
+        float px = p.getX();
+        float py = p.getY();
+        float pw = p.getWidth();
+        float ph = p.getHeight();
+
+        // Check tables
+        for (Table t : currentRoom.getTables()) {
+            if (overlapsRect(px, py, pw, ph, t.getX(), t.getY(), t.getWidth(), t.getHeight()))
+                return true;
+        }
+        // Check lockers (block whether open or closed)
+        for (Locker l : currentRoom.getLockers()) {
+            if (overlapsRect(px, py, pw, ph, l.getX(), l.getY(), l.getWidth(), l.getHeight()))
+                return true;
+        }
+        return false;
+    }
+
+    private boolean overlapsRect(float x, float y, float w, float h,
+            float x2, float y2, float w2, float h2) {
+        return x < x2 + w2 &&
+                x + w > x2 &&
+                y < y2 + h2 &&
+                y + h > y2;
     }
 
     private void checkRoomTransition() {
