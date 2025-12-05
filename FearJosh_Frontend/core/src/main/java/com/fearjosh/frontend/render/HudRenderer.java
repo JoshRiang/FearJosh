@@ -1,8 +1,12 @@
 package com.fearjosh.frontend.render;
 
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
+import com.fearjosh.frontend.manager.GameManager;
+import com.fearjosh.frontend.manager.GameDifficulty;
 
 public class HudRenderer {
 
@@ -89,5 +93,18 @@ public class HudRenderer {
 
     public Rectangle getPauseButtonBounds() {
         return pauseButtonBounds;
+    }
+
+    public void renderText(SpriteBatch batch,
+            BitmapFont font,
+            float virtualWidth,
+            float virtualHeight) {
+        GameDifficulty diff = GameManager.getInstance().getDifficulty();
+        String text = "Difficulty: " + diff.name().substring(0, 1).toUpperCase()
+                + diff.name().substring(1).toLowerCase();
+        Color old = font.getColor();
+        font.setColor(new Color(0.85f, 0.85f, 0.9f, 1f));
+        font.draw(batch, text, virtualWidth - 160f, virtualHeight - 8f);
+        font.setColor(old);
     }
 }

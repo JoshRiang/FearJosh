@@ -61,8 +61,7 @@ public class PlayScreen implements Screen {
     // Fog of War system
     private FrameBuffer darknessFrameBuffer;
     private Texture lightTexture; // White circle for punch-through
-    private static final float VISION_RADIUS = 90f; // Clear vision radius
-    private static final float FOG_DARKNESS = 0.8f; // 90% darkness outside vision
+    // Vision radius and fog darkness now driven by DifficultyStrategy
 
     // Rooms
     private final Map<RoomId, Room> rooms = new EnumMap<>(RoomId.class);
@@ -281,6 +280,12 @@ public class PlayScreen implements Screen {
                 BATTERY_MAX);
         shapeRenderer.end();
 
+        // Draw HUD text (difficulty)
+        batch.setProjectionMatrix(uiCamera.combined);
+        batch.begin();
+        hudRenderer.renderText(batch, font, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        batch.end();
+
         // Handle pause button click in UI space
         if (Gdx.input.justTouched()) {
             float screenX = Gdx.input.getX();
@@ -422,11 +427,13 @@ public class PlayScreen implements Screen {
         boolean shift = Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT)
                 || Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT);
 
-        float speed = WALK_SPEED;
+        com.fearjosh.frontend.manager.DifficultyStrategy ds = com.fearjosh.frontend.manager.GameManager.getInstance()
+                .getDifficultyStrategy();
+        float speed = WALK_SPEED * ds.walkSpeedMultiplier();
         boolean sprinting = false;
 
         if (shift && stamina > 0 && isMoving) {
-            speed = RUN_SPEED;
+            speed = RUN_SPEED * ds.runSpeedMultiplier();
             sprinting = true;
         }
 
@@ -435,7 +442,7 @@ public class PlayScreen implements Screen {
 
         // Stamina
         if (sprinting)
-            stamina -= STAMINA_DRAIN_RATE * delta;
+            stamina -= STAMINA_DRAIN_RATE * ds.staminaDrainMultiplier() * delta;
         else if (!isMoving)
             stamina += STAMINA_REGEN_RATE * delta;
 
@@ -516,7 +523,9 @@ public class PlayScreen implements Screen {
 
     private void updateBattery(float delta) {
         if (flashlightOn && battery > 0) {
-            battery -= BATTERY_DRAIN_RATE * delta;
+            com.fearjosh.frontend.manager.DifficultyStrategy ds = com.fearjosh.frontend.manager.GameManager
+                    .getInstance().getDifficultyStrategy();
+            battery -= BATTERY_DRAIN_RATE * ds.batteryDrainMultiplier() * delta;
             if (battery <= 0) {
                 battery = 0;
                 flashlightOn = false;
@@ -726,11 +735,15 @@ public class PlayScreen implements Screen {
     // ======================
 
     private void renderDarknessLayer() {
+        com.fearjosh.frontend.manager.DifficultyStrategy ds = com.fearjosh.frontend.manager.GameManager.getInstance()
+                .getDifficultyStrategy();
+        float visionRadius = ds.visionRadius();
+        float fogDarkness = ds.fogDarkness();
         // Step 1: Begin FrameBuffer
         darknessFrameBuffer.begin();
 
         // Step 2: Clear Background with dark color
-        Gdx.gl.glClearColor(0f, 0f, 0f, FOG_DARKNESS);
+        Gdx.gl.glClearColor(0f, 0f, 0f, fogDarkness);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         // Step 3: Use world camera projection directly
@@ -744,7 +757,7 @@ public class PlayScreen implements Screen {
         float cy = player.getCenterY();
 
         // Draw player vision circle (always visible)
-        float baseSize = VISION_RADIUS * 2f;
+        float baseSize = visionRadius * 2f;
 
         // Outer soft layer (reduced size)
         batch.setColor(1f, 1f, 1f, 0.3f);
@@ -799,7 +812,7 @@ public class PlayScreen implements Screen {
                 float ly = cy + (tipY - cy) * t;
 
                 // Size increases towards the tip
-                float circleSize = (VISION_RADIUS + coneWidth * t) * 2f;
+                float circleSize = (visionRadius + coneWidth * t) * 2f;
 
                 // Alpha decreases more gradually for smoother, more transparent effect
                 float alpha = 0.5f * (1f - t * 0.7f); // Starts at 0.5, fades to ~0.15

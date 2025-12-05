@@ -2,6 +2,8 @@ package com.fearjosh.frontend.factory;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.fearjosh.frontend.world.*;
+import com.fearjosh.frontend.manager.GameManager;
+import com.fearjosh.frontend.manager.DifficultyStrategy;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,10 +34,14 @@ public class RoomFactory {
 
         // Kalau sisi kiri/kanan DAN sisi itu punya gate, limit jadi 1
         boolean sideHasGate = false;
-        if (lockerSide == Side.LEFT && id.hasLeft()) sideHasGate = true;
-        if (lockerSide == Side.RIGHT && id.hasRight()) sideHasGate = true;
-        if (lockerSide == Side.TOP && id.hasUp()) sideHasGate = true;
-        if (lockerSide == Side.BOTTOM && id.hasDown()) sideHasGate = true;
+        if (lockerSide == Side.LEFT && id.hasLeft())
+            sideHasGate = true;
+        if (lockerSide == Side.RIGHT && id.hasRight())
+            sideHasGate = true;
+        if (lockerSide == Side.TOP && id.hasUp())
+            sideHasGate = true;
+        if (lockerSide == Side.BOTTOM && id.hasDown())
+            sideHasGate = true;
 
         // khusus permintaan: kalau side kiri/kanan dan ada gate, max 1
         if (sideHasGate && (lockerSide == Side.LEFT || lockerSide == Side.RIGHT)) {
@@ -43,14 +49,20 @@ public class RoomFactory {
         }
 
         placeLockers(lockerSide, lockerCount, lockers, interactables,
-            worldWidth, worldHeight, doorZones);
+                worldWidth, worldHeight, doorZones);
 
         // --- Generate meja (0..2), nempel ke tembok lain yang tidak ada locker ---
         int tableCount = MathUtils.random(0, 2);
         placeTables(tableCount, tables, lockers, worldWidth, worldHeight, doorZones, lockerSide);
 
         // --- Chance spawn baterai ---
-        boolean spawnBattery = MathUtils.randomBoolean(0.6f); // ~60% chance
+        DifficultyStrategy ds = GameManager.getInstance().getDifficultyStrategy();
+        float baseChance = 0.6f * ds.itemSpawnRateMultiplier();
+        if (baseChance < 0f)
+            baseChance = 0f;
+        if (baseChance > 1f)
+            baseChance = 1f;
+        boolean spawnBattery = MathUtils.randomBoolean(baseChance);
         if (spawnBattery) {
             boolean onTable = MathUtils.randomBoolean();
             if (onTable && !tables.isEmpty()) {
@@ -96,36 +108,34 @@ public class RoomFactory {
         float centerY = worldHeight / 2f;
 
         float doorMinX = centerX - DOOR_WIDTH / 2f;
-        float doorMaxX = centerX + DOOR_WIDTH / 2f;
         float doorMinY = centerY - DOOR_WIDTH / 2f;
-        float doorMaxY = centerY + DOOR_WIDTH / 2f;
 
         // top door
         if (id.hasUp()) {
-            zones.add(new float[]{doorMinX, worldHeight - DOOR_THICKNESS, DOOR_WIDTH, DOOR_THICKNESS});
+            zones.add(new float[] { doorMinX, worldHeight - DOOR_THICKNESS, DOOR_WIDTH, DOOR_THICKNESS });
         }
         // bottom door
         if (id.hasDown()) {
-            zones.add(new float[]{doorMinX, 0f, DOOR_WIDTH, DOOR_THICKNESS});
+            zones.add(new float[] { doorMinX, 0f, DOOR_WIDTH, DOOR_THICKNESS });
         }
         // left door
         if (id.hasLeft()) {
-            zones.add(new float[]{0f, doorMinY, DOOR_THICKNESS, DOOR_WIDTH});
+            zones.add(new float[] { 0f, doorMinY, DOOR_THICKNESS, DOOR_WIDTH });
         }
         // right door
         if (id.hasRight()) {
-            zones.add(new float[]{worldWidth - DOOR_THICKNESS, doorMinY, DOOR_THICKNESS, DOOR_WIDTH});
+            zones.add(new float[] { worldWidth - DOOR_THICKNESS, doorMinY, DOOR_THICKNESS, DOOR_WIDTH });
         }
 
         return zones;
     }
 
     private static boolean overlapsRect(float x, float y, float w, float h,
-                                        float x2, float y2, float w2, float h2) {
+            float x2, float y2, float w2, float h2) {
         return x < x2 + w2 &&
-            x + w > x2 &&
-            y < y2 + h2 &&
-            y + h > y2;
+                x + w > x2 &&
+                y < y2 + h2 &&
+                y + h > y2;
     }
 
     private static boolean overlapsZones(float x, float y, float w, float h, List<float[]> zones) {
@@ -140,12 +150,12 @@ public class RoomFactory {
     // ----------------- place lockers -----------------
 
     private static void placeLockers(Side side,
-                                     int lockerCount,
-                                     List<Locker> lockers,
-                                     List<Interactable> interactables,
-                                     float worldWidth,
-                                     float worldHeight,
-                                     List<float[]> doorZones) {
+            int lockerCount,
+            List<Locker> lockers,
+            List<Interactable> interactables,
+            float worldWidth,
+            float worldHeight,
+            List<float[]> doorZones) {
 
         int placed = 0;
         float gap = 8f;
@@ -158,7 +168,7 @@ public class RoomFactory {
                     float candidateX = x;
                     float candidateY = y;
                     if (!overlapsZones(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, doorZones) &&
-                        !overlapsAnyLocker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, lockers)) {
+                            !overlapsAnyLocker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, lockers)) {
                         Locker locker = new Locker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, interactables);
                         lockers.add(locker);
                         placed++;
@@ -174,7 +184,7 @@ public class RoomFactory {
                     float candidateX = x;
                     float candidateY = y;
                     if (!overlapsZones(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, doorZones) &&
-                        !overlapsAnyLocker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, lockers)) {
+                            !overlapsAnyLocker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, lockers)) {
                         Locker locker = new Locker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, interactables);
                         lockers.add(locker);
                         placed++;
@@ -190,7 +200,7 @@ public class RoomFactory {
                     float candidateX = x;
                     float candidateY = y;
                     if (!overlapsZones(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, doorZones) &&
-                        !overlapsAnyLocker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, lockers)) {
+                            !overlapsAnyLocker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, lockers)) {
                         Locker locker = new Locker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, interactables);
                         lockers.add(locker);
                         placed++;
@@ -206,7 +216,7 @@ public class RoomFactory {
                     float candidateX = x;
                     float candidateY = y;
                     if (!overlapsZones(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, doorZones) &&
-                        !overlapsAnyLocker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, lockers)) {
+                            !overlapsAnyLocker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, lockers)) {
                         Locker locker = new Locker(candidateX, candidateY, LOCKER_WIDTH, LOCKER_HEIGHT, interactables);
                         lockers.add(locker);
                         placed++;
@@ -221,7 +231,7 @@ public class RoomFactory {
     private static boolean overlapsAnyLocker(float x, float y, float w, float h, List<Locker> lockers) {
         for (Locker locker : lockers) {
             if (overlapsRect(x, y, w, h,
-                locker.getX(), locker.getY(), locker.getWidth(), locker.getHeight())) {
+                    locker.getX(), locker.getY(), locker.getWidth(), locker.getHeight())) {
                 return true;
             }
         }
@@ -231,12 +241,12 @@ public class RoomFactory {
     // ----------------- place tables -----------------
 
     private static void placeTables(int tableCount,
-                                    List<Table> tables,
-                                    List<Locker> lockers,
-                                    float worldWidth,
-                                    float worldHeight,
-                                    List<float[]> doorZones,
-                                    Side lockerSide) {
+            List<Table> tables,
+            List<Locker> lockers,
+            float worldWidth,
+            float worldHeight,
+            List<float[]> doorZones,
+            Side lockerSide) {
 
         int placed = 0;
         int attemptsTotal = 0;
@@ -267,9 +277,12 @@ public class RoomFactory {
                     break;
             }
 
-            if (overlapsZones(x, y, TABLE_WIDTH, TABLE_HEIGHT, doorZones)) continue;
-            if (overlapsAnyLocker(x, y, TABLE_WIDTH, TABLE_HEIGHT, lockers)) continue;
-            if (overlapsAnyTable(x, y, TABLE_WIDTH, TABLE_HEIGHT, tables)) continue;
+            if (overlapsZones(x, y, TABLE_WIDTH, TABLE_HEIGHT, doorZones))
+                continue;
+            if (overlapsAnyLocker(x, y, TABLE_WIDTH, TABLE_HEIGHT, lockers))
+                continue;
+            if (overlapsAnyTable(x, y, TABLE_WIDTH, TABLE_HEIGHT, tables))
+                continue;
 
             tables.add(new Table(x, y, TABLE_WIDTH, TABLE_HEIGHT));
             placed++;
@@ -287,7 +300,7 @@ public class RoomFactory {
     private static boolean overlapsAnyTable(float x, float y, float w, float h, List<Table> tables) {
         for (Table table : tables) {
             if (overlapsRect(x, y, w, h,
-                table.getX(), table.getY(), table.getWidth(), table.getHeight())) {
+                    table.getX(), table.getY(), table.getWidth(), table.getHeight())) {
                 return true;
             }
         }

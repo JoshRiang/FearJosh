@@ -2,6 +2,9 @@ package com.fearjosh.frontend.manager;
 
 import com.fearjosh.frontend.entity.Player;
 import com.fearjosh.frontend.screen.PlayScreen;
+import com.fearjosh.frontend.manager.difficulty.EasyDifficulty;
+import com.fearjosh.frontend.manager.difficulty.MediumDifficulty;
+import com.fearjosh.frontend.manager.difficulty.HardDifficulty;
 import com.fearjosh.frontend.world.RoomId;
 
 /**
@@ -18,6 +21,8 @@ public class GameManager {
 
     private float virtualWidth = 800f;
     private float virtualHeight = 600f;
+    private GameDifficulty difficulty = GameDifficulty.MEDIUM;
+    private DifficultyStrategy difficultyStrategy = new MediumDifficulty();
 
     private GameManager() {
     }
@@ -74,6 +79,29 @@ public class GameManager {
 
     public void setPlayScreen(PlayScreen screen) {
         this.playScreen = screen;
+    }
+
+    public GameDifficulty getDifficulty() {
+        return difficulty;
+    }
+
+    public DifficultyStrategy getDifficultyStrategy() {
+        return difficultyStrategy;
+    }
+
+    public void setDifficulty(GameDifficulty diff) {
+        this.difficulty = diff;
+        switch (diff) {
+            case EASY:
+                this.difficultyStrategy = new EasyDifficulty();
+                break;
+            case MEDIUM:
+                this.difficultyStrategy = new MediumDifficulty();
+                break;
+            case HARD:
+                this.difficultyStrategy = new HardDifficulty();
+                break;
+        }
     }
 
     public Player getPlayer() {

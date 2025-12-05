@@ -19,6 +19,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.fearjosh.frontend.FearJosh;
 import com.fearjosh.frontend.manager.GameManager;
+import com.fearjosh.frontend.manager.GameDifficulty;
 
 /**
  * Simple main menu screen with Play, Settings, and Quit.
@@ -103,6 +104,13 @@ public class MainMenuScreen implements Screen {
         Label subtitle = new Label("A stealth-horror experience", skin);
         subtitle.setColor(new Color(0.85f, 0.85f, 0.9f, 1f));
 
+        // Difficulty status label
+        GameDifficulty diff = GameManager.getInstance().getDifficulty();
+        String diffText = "Difficulty: " + diff.name().substring(0, 1).toUpperCase()
+                + diff.name().substring(1).toLowerCase();
+        Label difficultyLabel = new Label(diffText, skin);
+        difficultyLabel.setColor(new Color(0.8f, 0.8f, 0.85f, 1f));
+
         // Determine session state
         boolean hasSession = GameManager.getInstance().hasActiveSession();
 
@@ -115,7 +123,8 @@ public class MainMenuScreen implements Screen {
         float btnHeight = 56f;
 
         card.add(title).padTop(18f).padBottom(6f).row();
-        card.add(subtitle).padBottom(24f).row();
+        card.add(subtitle).padBottom(6f).row();
+        card.add(difficultyLabel).padBottom(18f).row();
         card.add(playBtn).width(btnWidth).height(btnHeight).pad(6f).row();
         if (resumeBtn != null) {
             card.add(resumeBtn).width(btnWidth).height(btnHeight).pad(6f).row();
