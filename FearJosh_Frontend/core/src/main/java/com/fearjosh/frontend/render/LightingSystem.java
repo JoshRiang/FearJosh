@@ -6,9 +6,9 @@ import com.fearjosh.frontend.entity.Player;
 
 public class LightingSystem {
 
-    // FOV dasar (tanpa senter) – “mata Jonatan”
-    private final float povRadius = 90f;   // radius lingkaran sekitar player
-    private final float povAlpha = 0.20f; // seberapa kuat mencerahkan area sekitar
+    // FOV dasar (tanpa senter) – "mata Jonatan"
+    private final float povRadius = 150f;
+    private final float povAlpha = 0.20f;
 
     // Konfigurasi cone senter (ini yang tergantung baterai)
     private final float minConeLength = 140f;
@@ -17,73 +17,80 @@ public class LightingSystem {
     private final float minConeWidth = 40f;
     private final float maxConeWidth = 80f;
 
-    // Cahaya senter harus lebih terang dari FOV dasar
     private final float minConeAlpha = 0.40f;
     private final float maxConeAlpha = 0.90f;
 
     public void render(ShapeRenderer renderer,
-                       Player player,
-                       boolean flashlightOn,
-                       float batteryFrac) {
+            Player player,
+            boolean flashlightOn,
+            float batteryFrac) {
 
         batteryFrac = MathUtils.clamp(batteryFrac, 0f, 1f);
+
+        // Enable blending for alpha transparency
+        com.badlogic.gdx.Gdx.gl.glEnable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
+        com.badlogic.gdx.Gdx.gl.glBlendFunc(com.badlogic.gdx.graphics.GL20.GL_SRC_ALPHA,
+                com.badlogic.gdx.graphics.GL20.GL_ONE_MINUS_SRC_ALPHA);
 
         float cx = player.getCenterX();
         float cy = player.getCenterY();
 
         // =========================
-        //  FOV DASAR (TANPA SENTER)
+        // FLASHLIGHT CONE (LIGHT HOLE)
         // =========================
-        // ini “mata Jonatan”: area di sekitar dia yang otomatis lebih terang
-        // nilai 0.20f kurang lebih seperti opacity 20%
-        renderer.setColor(1f, 1f, 1f, 0.20f);
-        renderer.circle(cx, cy, povRadius);
+        if (flashlightOn && batteryFrac > 0f) {
+            float coneLength = MathUtils.lerp(minConeLength, maxConeLength, batteryFrac);
+            float coneHalfWidth = MathUtils.lerp(minConeWidth, maxConeWidth, batteryFrac);
+            float coneAlpha = MathUtils.lerp(minConeAlpha, maxConeAlpha, batteryFrac);
 
-        // =========================
-        //  FLASHLIGHT CONE
-        // =========================
-        if (!flashlightOn || batteryFrac <= 0f) return;
+            // Draw multiple triangles with decreasing size and alpha for smooth gradient
+            int layers = 20; // More layers for smoother edge
+            for (int i = layers; i >= 0; i--) {
+                float t = (float) i / layers;
 
-        float coneLength = MathUtils.lerp(minConeLength, maxConeLength, batteryFrac);
-        float coneHalfWidth = MathUtils.lerp(minConeWidth, maxConeWidth, batteryFrac);
+                // Extend slightly beyond original size for softer edges
+                float layerLength = coneLength * (t * 1.1f);
+                float layerWidth = coneHalfWidth * (t * 1.1f);
 
-        // flashlight lebih “menerangkan” daripada FOV:
-        // alpha min 0.4 (40%), max 0.8 (80%)
-        float coneAlpha = MathUtils.lerp(0.4f, 0.8f, batteryFrac);
+                // Cubic falloff for very smooth natural light dissipation
+                float alphaMultiplier = t * t * t; // Cubic for smoother fade
+                float layerAlpha = coneAlpha * 0.08f * alphaMultiplier; // Lower base alpha
 
-        renderer.setColor(1f, 1f, 0.6f, coneAlpha);
+                renderer.setColor(1f, 1f, 0.7f, layerAlpha);
 
-        float x1 = cx, y1 = cy;
-        float x2 = cx, y2 = cy;
-        float x3 = cx, y3 = cy;
+                float x1 = cx, y1 = cy;
+                float x2 = cx, y2 = cy;
+                float x3 = cx, y3 = cy;
 
-        switch (player.getDirection()) {
-            case UP:
-                x2 = cx - coneHalfWidth;
-                y2 = cy + coneLength;
-                x3 = cx + coneHalfWidth;
-                y3 = cy + coneLength;
-                break;
-            case DOWN:
-                x2 = cx - coneHalfWidth;
-                y2 = cy - coneLength;
-                x3 = cx + coneHalfWidth;
-                y3 = cy - coneLength;
-                break;
-            case LEFT:
-                x2 = cx - coneLength;
-                y2 = cy - coneHalfWidth;
-                x3 = cx - coneLength;
-                y3 = cy + coneHalfWidth;
-                break;
-            case RIGHT:
-                x2 = cx + coneLength;
-                y2 = cy - coneHalfWidth;
-                x3 = cx + coneLength;
-                y3 = cy + coneHalfWidth;
-                break;
+                switch (player.getDirection()) {
+                    case UP:
+                        x2 = cx - layerWidth;
+                        y2 = cy + layerLength;
+                        x3 = cx + layerWidth;
+                        y3 = cy + layerLength;
+                        break;
+                    case DOWN:
+                        x2 = cx - layerWidth;
+                        y2 = cy - layerLength;
+                        x3 = cx + layerWidth;
+                        y3 = cy - layerLength;
+                        break;
+                    case LEFT:
+                        x2 = cx - layerLength;
+                        y2 = cy - layerWidth;
+                        x3 = cx - layerLength;
+                        y3 = cy + layerWidth;
+                        break;
+                    case RIGHT:
+                        x2 = cx + layerLength;
+                        y2 = cy - layerWidth;
+                        x3 = cx + layerLength;
+                        y3 = cy + layerWidth;
+                        break;
+                }
+
+                renderer.triangle(x1, y1, x2, y2, x3, y3);
+            }
         }
-
-        renderer.triangle(x1, y1, x2, y2, x3, y3);
     }
 }

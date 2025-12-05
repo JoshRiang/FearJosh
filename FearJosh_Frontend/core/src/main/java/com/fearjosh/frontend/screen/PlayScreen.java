@@ -7,7 +7,9 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -52,9 +54,15 @@ public class PlayScreen implements Screen {
     private BitmapFont font;
 
     private Player player;
-    private Texture playerTexture;   // hanya dipakai untuk ukuran awal
+    private Texture playerTexture; // hanya dipakai untuk ukuran awal
     // overlay ambience gelap (vignette)
     private Texture vignetteTexture;
+
+    // Fog of War system
+    private FrameBuffer darknessFrameBuffer;
+    private Texture lightTexture; // White circle for punch-through
+    private static final float VISION_RADIUS = 90f; // Clear vision radius
+    private static final float FOG_DARKNESS = 0.8f; // 90% darkness outside vision
 
     // Rooms
     private final Map<RoomId, Room> rooms = new EnumMap<>(RoomId.class);
@@ -116,15 +124,14 @@ public class PlayScreen implements Screen {
         this.game = game;
 
         // Hitung jumlah kolom/baris floor berdasarkan ukuran tile
-        FLOOR_COLS = (int)Math.ceil(VIRTUAL_WIDTH / FLOOR_TILE_SIZE);
-        FLOOR_ROWS = (int)Math.ceil(VIRTUAL_HEIGHT / FLOOR_TILE_SIZE);
+        FLOOR_COLS = (int) Math.ceil(VIRTUAL_WIDTH / FLOOR_TILE_SIZE);
+        FLOOR_ROWS = (int) Math.ceil(VIRTUAL_HEIGHT / FLOOR_TILE_SIZE);
 
         // Renderer
         shapeRenderer = new ShapeRenderer();
         batch = new SpriteBatch();
         font = new BitmapFont();
         font.setColor(Color.WHITE);
-
 
         // Cameras
         worldCamera = new OrthographicCamera();
@@ -151,6 +158,12 @@ public class PlayScreen implements Screen {
 
         vignetteTexture = new Texture("vignette.png");
 
+        // Initialize FrameBuffer for darkness layer
+        darknessFrameBuffer = new FrameBuffer(Pixmap.Format.RGBA8888, (int) VIRTUAL_WIDTH, (int) VIRTUAL_HEIGHT, false);
+
+        // Create light texture for vision circle
+        lightTexture = createLightTexture(512);
+
         // Texture sementara hanya untuk ukuran awal player (placeholder)
         playerTexture = new Texture("white.png");
         float scale = 0.4f;
@@ -159,11 +172,10 @@ public class PlayScreen implements Screen {
 
         // Buat player di tengah room awal
         player = new Player(
-            VIRTUAL_WIDTH / 2f - pw / 2f,
-            VIRTUAL_HEIGHT / 2f - ph / 2f,
-            pw,
-            ph
-        );
+                VIRTUAL_WIDTH / 2f - pw / 2f,
+                VIRTUAL_HEIGHT / 2f - ph / 2f,
+                pw,
+                ph);
         player.loadAnimations(); // player sendiri yang load sprite aslinya
 
         // Room awal
@@ -176,12 +188,12 @@ public class PlayScreen implements Screen {
     private void switchToRoom(RoomId id) {
         currentRoomId = id;
         currentRoom = rooms.computeIfAbsent(id,
-            rid -> RoomFactory.createRoom(rid, VIRTUAL_WIDTH, VIRTUAL_HEIGHT));
+                rid -> RoomFactory.createRoom(rid, VIRTUAL_WIDTH, VIRTUAL_HEIGHT));
         currentInteractable = null;
     }
 
     // ======================
-    //  GAME LOOP
+    // GAME LOOP
     // ======================
 
     @Override
@@ -209,7 +221,8 @@ public class PlayScreen implements Screen {
         // 2) Shapes: lighting, walls, furniture, item
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        lightingSystem.render(shapeRenderer, player, flashlightOn, battery / BATTERY_MAX);
+        lightingSystem.render(shapeRenderer, player, flashlightOn, battery); // Disabled: using fog of war system
+                                                                             // instead
         drawWalls();
 
         for (Table t : currentRoom.getTables())
@@ -224,36 +237,30 @@ public class PlayScreen implements Screen {
 
         shapeRenderer.end();
 
-        // 3) Texture: player + prompt 'E' + vignette ambience
+        // 3) Texture: player + prompt 'E'
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
 
         // player
         TextureRegion frame = player.getCurrentFrame(isMoving);
         batch.draw(frame,
-            player.getX(),
-            player.getY(),
-            player.getWidth(),
-            player.getHeight()
-        );
+                player.getX(),
+                player.getY(),
+                player.getWidth(),
+                player.getHeight());
 
         // prompt E
         if (currentInteractable != null && currentInteractable.isActive()) {
             font.draw(batch,
-                "E",
-                currentInteractable.getCenterX() - 4,
-                currentInteractable.getCenterY() + 30
-            );
+                    "E",
+                    currentInteractable.getCenterX() - 4,
+                    currentInteractable.getCenterY() + 30);
         }
 
-        // 3.5) Ambience gelap di sudut layar (vignette, hanya di world, HUD aman)
-        batch.setColor(1f, 1f, 1f, 0.8f); // pakai alpha 80%
-        float vx = worldCamera.position.x - VIRTUAL_WIDTH  / 2f;
-        float vy = worldCamera.position.y - VIRTUAL_HEIGHT / 2f;
-        batch.draw(vignetteTexture, vx, vy, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-        batch.setColor(1f, 1f, 1f, 1f);   // reset
-
         batch.end();
+
+        // 4) Fog of War - Render to darkness buffer, then composite
+        renderDarknessLayer();
 
         // ---------- HUD RENDER (kamera UI) ----------
         uiCamera.update();
@@ -262,23 +269,23 @@ public class PlayScreen implements Screen {
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         hudRenderer.render(shapeRenderer,
-            VIRTUAL_WIDTH,
-            VIRTUAL_HEIGHT,
-            stamina,
-            STAMINA_MAX,
-            battery,
-            BATTERY_MAX);
+                VIRTUAL_WIDTH,
+                VIRTUAL_HEIGHT,
+                stamina,
+                STAMINA_MAX,
+                battery,
+                BATTERY_MAX);
         shapeRenderer.end();
 
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
-
     private void update(float delta) {
 
         if (transitionCooldown > 0) {
             transitionCooldown -= delta;
-            if (transitionCooldown < 0) transitionCooldown = 0;
+            if (transitionCooldown < 0)
+                transitionCooldown = 0;
         }
 
         handleInput(delta);
@@ -298,7 +305,7 @@ public class PlayScreen implements Screen {
     }
 
     // ======================
-    //  INPUT & MOVEMENT
+    // INPUT & MOVEMENT
     // ======================
 
     private void handleInput(float delta) {
@@ -309,10 +316,14 @@ public class PlayScreen implements Screen {
         boolean left = Gdx.input.isKeyPressed(Input.Keys.A);
         boolean right = Gdx.input.isKeyPressed(Input.Keys.D);
 
-        if (up) dy += 1;
-        if (down) dy -= 1;
-        if (left) dx -= 1;
-        if (right) dx += 1;
+        if (up)
+            dy += 1;
+        if (down)
+            dy -= 1;
+        if (left)
+            dx -= 1;
+        if (right)
+            dx += 1;
 
         isMoving = (dx != 0 || dy != 0);
 
@@ -329,7 +340,7 @@ public class PlayScreen implements Screen {
 
         // Sprint
         boolean shift = Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT)
-            || Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT);
+                || Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT);
 
         float speed = WALK_SPEED;
         boolean sprinting = false;
@@ -343,11 +354,15 @@ public class PlayScreen implements Screen {
             player.move(dx * speed * delta, dy * speed * delta);
 
         // Stamina
-        if (sprinting) stamina -= STAMINA_DRAIN_RATE * delta;
-        else if (!isMoving) stamina += STAMINA_REGEN_RATE * delta;
+        if (sprinting)
+            stamina -= STAMINA_DRAIN_RATE * delta;
+        else if (!isMoving)
+            stamina += STAMINA_REGEN_RATE * delta;
 
-        if (stamina < 0) stamina = 0;
-        if (stamina > STAMINA_MAX) stamina = STAMINA_MAX;
+        if (stamina < 0)
+            stamina = 0;
+        if (stamina > STAMINA_MAX)
+            stamina = STAMINA_MAX;
     }
 
     private void checkRoomTransition() {
@@ -430,7 +445,7 @@ public class PlayScreen implements Screen {
     }
 
     // ======================
-    //  INTERACTION
+    // INTERACTION
     // ======================
 
     private void findCurrentInteractable() {
@@ -441,7 +456,8 @@ public class PlayScreen implements Screen {
         float py = player.getCenterY();
 
         for (Interactable inter : currentRoom.getInteractables()) {
-            if (!inter.isActive() || !inter.canInteract(player)) continue;
+            if (!inter.isActive() || !inter.canInteract(player))
+                continue;
 
             float dx = inter.getCenterX() - px;
             float dy = inter.getCenterY() - py;
@@ -454,7 +470,8 @@ public class PlayScreen implements Screen {
         }
 
         for (Locker locker : currentRoom.getLockers()) {
-            if (!locker.isActive() || !locker.canInteract(player)) continue;
+            if (!locker.isActive() || !locker.canInteract(player))
+                continue;
 
             float dx = locker.getCenterX() - px;
             float dy = locker.getCenterY() - py;
@@ -469,8 +486,8 @@ public class PlayScreen implements Screen {
 
     private void handleInteractInput() {
         if (currentInteractable != null &&
-            currentInteractable.isActive() &&
-            Gdx.input.isKeyJustPressed(Input.Keys.E)) {
+                currentInteractable.isActive() &&
+                Gdx.input.isKeyJustPressed(Input.Keys.E)) {
 
             InteractionResult result = currentInteractable.interact();
             if (result != null) {
@@ -480,7 +497,7 @@ public class PlayScreen implements Screen {
     }
 
     // ======================
-    //  WALLS
+    // WALLS
     // ======================
 
     private void drawWalls() {
@@ -494,19 +511,19 @@ public class PlayScreen implements Screen {
         // Top
         if (currentRoomId.hasUp()) {
             shapeRenderer.rect(0, VIRTUAL_HEIGHT - WALL_THICKNESS,
-                doorMinX, WALL_THICKNESS);
+                    doorMinX, WALL_THICKNESS);
             shapeRenderer.rect(doorMaxX, VIRTUAL_HEIGHT - WALL_THICKNESS,
-                VIRTUAL_WIDTH - doorMaxX, WALL_THICKNESS);
+                    VIRTUAL_WIDTH - doorMaxX, WALL_THICKNESS);
         } else {
             shapeRenderer.rect(0, VIRTUAL_HEIGHT - WALL_THICKNESS,
-                VIRTUAL_WIDTH, WALL_THICKNESS);
+                    VIRTUAL_WIDTH, WALL_THICKNESS);
         }
 
         // Bottom
         if (currentRoomId.hasDown()) {
             shapeRenderer.rect(0, 0, doorMinX, WALL_THICKNESS);
             shapeRenderer.rect(doorMaxX, 0,
-                VIRTUAL_WIDTH - doorMaxX, WALL_THICKNESS);
+                    VIRTUAL_WIDTH - doorMaxX, WALL_THICKNESS);
         } else {
             shapeRenderer.rect(0, 0, VIRTUAL_WIDTH, WALL_THICKNESS);
         }
@@ -515,7 +532,7 @@ public class PlayScreen implements Screen {
         if (currentRoomId.hasLeft()) {
             shapeRenderer.rect(0, 0, WALL_THICKNESS, doorMinY);
             shapeRenderer.rect(0, doorMaxY,
-                WALL_THICKNESS, VIRTUAL_HEIGHT - doorMaxY);
+                    WALL_THICKNESS, VIRTUAL_HEIGHT - doorMaxY);
         } else {
             shapeRenderer.rect(0, 0, WALL_THICKNESS, VIRTUAL_HEIGHT);
         }
@@ -523,17 +540,17 @@ public class PlayScreen implements Screen {
         // Right
         if (currentRoomId.hasRight()) {
             shapeRenderer.rect(VIRTUAL_WIDTH - WALL_THICKNESS, 0,
-                WALL_THICKNESS, doorMinY);
+                    WALL_THICKNESS, doorMinY);
             shapeRenderer.rect(VIRTUAL_WIDTH - WALL_THICKNESS, doorMaxY,
-                WALL_THICKNESS, VIRTUAL_HEIGHT - doorMaxY);
+                    WALL_THICKNESS, VIRTUAL_HEIGHT - doorMaxY);
         } else {
             shapeRenderer.rect(VIRTUAL_WIDTH - WALL_THICKNESS, 0,
-                WALL_THICKNESS, VIRTUAL_HEIGHT);
+                    WALL_THICKNESS, VIRTUAL_HEIGHT);
         }
     }
 
     // ======================
-    //  FLOOR HELPERS
+    // FLOOR HELPERS
     // ======================
 
     // Memecah 1 texture 4x4 jadi array 16 tile
@@ -542,10 +559,9 @@ public class PlayScreen implements Screen {
         int ROWS = 4;
 
         TextureRegion[][] tmp = TextureRegion.split(
-            tex,
-            tex.getWidth() / COLS,
-            tex.getHeight() / ROWS
-        );
+                tex,
+                tex.getWidth() / COLS,
+                tex.getHeight() / ROWS);
 
         TextureRegion[] flat = new TextureRegion[COLS * ROWS];
         int idx = 0;
@@ -574,14 +590,21 @@ public class PlayScreen implements Screen {
         int choice = rng.nextInt(3);
         switch (choice) {
             default:
-            case 0: pool = floorTiles1; break;
-            case 1: pool = floorTiles2; break;
-            case 2: pool = floorTiles3; break;
+            case 0:
+                pool = floorTiles1;
+                break;
+            case 1:
+                pool = floorTiles2;
+                break;
+            case 2:
+                pool = floorTiles3;
+                break;
         }
 
         TextureRegion[][] grid = new TextureRegion[FLOOR_ROWS][FLOOR_COLS];
 
-        // supaya pattern konsisten tiap kali balik ke room yang sama, seed based on RoomId
+        // supaya pattern konsisten tiap kali balik ke room yang sama, seed based on
+        // RoomId
         long seed = id.ordinal() * 99991L + 12345L;
         Random r = new Random(seed);
 
@@ -606,7 +629,8 @@ public class PlayScreen implements Screen {
         for (int row = 0; row < FLOOR_ROWS; row++) {
             for (int col = 0; col < FLOOR_COLS; col++) {
                 TextureRegion region = grid[row][col];
-                if (region == null) continue;
+                if (region == null)
+                    continue;
 
                 float x = col * tileW;
                 float y = row * tileH;
@@ -618,7 +642,131 @@ public class PlayScreen implements Screen {
     }
 
     // ======================
-    //  LIFECYCLE
+    // FOG OF WAR
+    // ======================
+
+    private void renderDarknessLayer() {
+        // Step 1: Begin FrameBuffer
+        darknessFrameBuffer.begin();
+
+        // Step 2: Clear Background with dark color
+        Gdx.gl.glClearColor(0f, 0f, 0f, FOG_DARKNESS);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        // Step 3: Use world camera projection directly
+        batch.setProjectionMatrix(worldCamera.combined);
+        batch.begin();
+
+        // Step 4: Punch the Hole with gradient - Set erase blend function
+        batch.setBlendFunction(GL20.GL_ZERO, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        float cx = player.getCenterX();
+        float cy = player.getCenterY();
+
+        // Draw player vision circle (always visible)
+        float baseSize = VISION_RADIUS * 2f;
+
+        // Outer soft layer (reduced size)
+        batch.setColor(1f, 1f, 1f, 0.3f);
+        float outerSize = baseSize * 1.2f;
+        batch.draw(lightTexture, cx - outerSize / 2f, cy - outerSize / 2f, outerSize, outerSize);
+
+        // Middle layer
+        batch.setColor(1f, 1f, 1f, 0.6f);
+        float midSize = baseSize * 1.1f;
+        batch.draw(lightTexture, cx - midSize / 2f, cy - midSize / 2f, midSize, midSize);
+
+        // Inner bright layer (full erase)
+        batch.setColor(1f, 1f, 1f, 1f);
+        batch.draw(lightTexture, cx - baseSize / 2f, cy - baseSize / 2f, baseSize, baseSize);
+
+        // Flashlight cone - adds extended vision when active
+        if (flashlightOn && battery > 0f) {
+            float batteryFrac = battery / BATTERY_MAX;
+
+            // Flashlight parameters based on battery
+            float minConeLength = 140f;
+            float maxConeLength = 280f;
+            float minConeWidth = 40f;
+            float maxConeWidth = 80f;
+
+            float coneLength = minConeLength + (maxConeLength - minConeLength) * batteryFrac;
+            float coneWidth = minConeWidth + (maxConeWidth - minConeWidth) * batteryFrac;
+
+            // Calculate cone tip position based on player direction
+            float tipX = cx, tipY = cy;
+
+            switch (player.getDirection()) {
+                case UP:
+                    tipY = cy + coneLength;
+                    break;
+                case DOWN:
+                    tipY = cy - coneLength;
+                    break;
+                case LEFT:
+                    tipX = cx - coneLength;
+                    break;
+                case RIGHT:
+                    tipX = cx + coneLength;
+                    break;
+            }
+
+            // Draw circles along the cone path to create elongated light
+            int steps = 12; // More steps for smoother gradient
+            for (int i = 0; i <= steps; i++) {
+                float t = (float) i / steps;
+                float lx = cx + (tipX - cx) * t;
+                float ly = cy + (tipY - cy) * t;
+
+                // Size increases towards the tip
+                float circleSize = (VISION_RADIUS + coneWidth * t) * 2f;
+
+                // Alpha decreases more gradually for smoother, more transparent effect
+                float alpha = 0.5f * (1f - t * 0.7f); // Starts at 0.5, fades to ~0.15
+                batch.setColor(1f, 1f, 0.85f, alpha); // Subtle yellowish tint
+
+                batch.draw(lightTexture, lx - circleSize / 2f, ly - circleSize / 2f, circleSize, circleSize);
+            }
+        }
+
+        // Step 5: Reset Blending
+        batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        batch.end();
+
+        // Step 6: End FrameBuffer
+        darknessFrameBuffer.end();
+
+        // Step 7: Draw FrameBuffer texture as UI overlay
+        batch.setProjectionMatrix(uiCamera.combined);
+        batch.begin();
+        batch.setColor(1f, 1f, 1f, 1f);
+
+        batch.draw(darknessFrameBuffer.getColorBufferTexture(), 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, 0, 0, 1, 1);
+
+        batch.end();
+    }
+
+    private Texture createLightTexture(int size) {
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setColor(1f, 1f, 1f, 1f); // White color
+
+        int centerX = size / 2;
+        int centerY = size / 2;
+        int radius = size / 2;
+
+        // Draw filled white circle
+        pixmap.fillCircle(centerX, centerY, radius);
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        pixmap.dispose();
+
+        return texture;
+    }
+
+    // ======================
+    // LIFECYCLE
     // ======================
 
     @Override
@@ -627,10 +775,21 @@ public class PlayScreen implements Screen {
         uiCamera.setToOrtho(false, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     }
 
-    @Override public void show() {}
-    @Override public void hide() {}
-    @Override public void pause() {}
-    @Override public void resume() {}
+    @Override
+    public void show() {
+    }
+
+    @Override
+    public void hide() {
+    }
+
+    @Override
+    public void pause() {
+    }
+
+    @Override
+    public void resume() {
+    }
 
     @Override
     public void dispose() {
@@ -644,6 +803,8 @@ public class PlayScreen implements Screen {
         floorTex3.dispose();
 
         vignetteTexture.dispose();
+        lightTexture.dispose();
+        darknessFrameBuffer.dispose();
     }
 
 }

@@ -1,4 +1,13 @@
+floor_tiles_1.png
+floor_tiles_2.png
+floor_tiles_3.png
 jonatan.png
+jonatan_down.png
+jonatan_left.png
+jonatan_right.png
+jonatan_up.png
 josh.png
 lebron.png
 libgdx.png
+vignette.png
+white.png
