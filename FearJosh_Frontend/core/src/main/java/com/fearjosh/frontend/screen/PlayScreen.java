@@ -10,41 +10,51 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.fearjosh.frontend.FearJosh;
+import com.fearjosh.frontend.camera.CameraController;
 import com.fearjosh.frontend.entity.Player;
 import com.fearjosh.frontend.factory.RoomFactory;
+import com.fearjosh.frontend.render.HudRenderer;
+import com.fearjosh.frontend.render.LightingSystem;
 import com.fearjosh.frontend.world.*;
 
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 public class PlayScreen implements Screen {
 
-    // Room transition
+    // Transition antar room
     private float transitionCooldown = 0f;
-    private static final float TRANSITION_COOLDOWN_DURATION = 0.2f; // detik
+    private static final float TRANSITION_COOLDOWN_DURATION = 0.2f;
 
+    // Resolusi virtual (view camera)
     private static final float VIRTUAL_WIDTH = 800f;
     private static final float VIRTUAL_HEIGHT = 600f;
+
+    // Zoom camera ( <1 = zoom in )
+    private static final float CAMERA_ZOOM = 0.7f;
 
     private static final float DOOR_WIDTH = 80f;
     private static final float DOOR_THICKNESS = 20f;
     private static final float WALL_THICKNESS = 6f;
+    private static final float ENTRY_OFFSET = 20f;
 
     private static final float INTERACT_RANGE = 60f;
 
     private final FearJosh game;
-    private OrthographicCamera camera;
-    private Viewport viewport;
     private ShapeRenderer shapeRenderer;
     private SpriteBatch batch;
     private BitmapFont font;
 
     private Player player;
-    private Texture playerTexture;
+    private Texture playerTexture;   // hanya dipakai untuk ukuran awal
+    // overlay ambience gelap (vignette)
+    private Texture vignetteTexture;
 
     // Rooms
     private final Map<RoomId, Room> rooms = new EnumMap<>(RoomId.class);
@@ -55,47 +65,112 @@ public class PlayScreen implements Screen {
     private static final float WALK_SPEED = 150f;
     private static final float RUN_SPEED = 260f;
     private static final float STAMINA_MAX = 1f;
-    private static final float STAMINA_DRAIN_RATE = 0.4f;   // per detik saat sprint
-    private static final float STAMINA_REGEN_RATE = 0.25f;  // per detik saat diam
-
+    private static final float STAMINA_DRAIN_RATE = 0.4f;
+    private static final float STAMINA_REGEN_RATE = 0.25f;
     private float stamina = STAMINA_MAX;
 
     // Flashlight / battery
     private static final float BATTERY_MAX = 1f;
-    private static final float BATTERY_DRAIN_RATE = 0.08f; // per detik saat nyala
+    private static final float BATTERY_DRAIN_RATE = 0.08f;
     private float battery = BATTERY_MAX;
     private boolean flashlightOn = false;
 
-    // Interaksi
+    // Interaction
     private Interactable currentInteractable = null;
+
+    // Flag movement (untuk animasi)
+    private boolean isMoving = false;
+
+    // Cameras
+    private OrthographicCamera worldCamera;
+    private Viewport worldViewport;
+    private OrthographicCamera uiCamera;
+
+    // Sistem terpisah
+    private CameraController cameraController;
+    private LightingSystem lightingSystem;
+    private HudRenderer hudRenderer;
+
+    // ------------ FLOOR TILES ------------
+    // ukuran world untuk 1 tile lantai (lebih kecil -> lebih rapat)
+    private static final float FLOOR_TILE_SIZE = 32f;
+
+    private final int FLOOR_COLS;
+    private final int FLOOR_ROWS;
+
+    private Texture floorTex1;
+    private Texture floorTex2;
+    private Texture floorTex3;
+
+    // masing-masing tileset berisi 16 tile kecil (4x4)
+    private TextureRegion[] floorTiles1;
+    private TextureRegion[] floorTiles2;
+    private TextureRegion[] floorTiles3;
+
+    // tiap room punya grid sendiri (FLOOR_ROWS x FLOOR_COLS)
+    private final Map<RoomId, TextureRegion[][]> roomFloors = new EnumMap<>(RoomId.class);
+
+    private final Random rng = new Random();
 
     public PlayScreen(FearJosh game) {
         this.game = game;
-        camera = new OrthographicCamera();
-        viewport = new FitViewport(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, camera);
-        viewport.apply();
-        camera.position.set(VIRTUAL_WIDTH / 2f, VIRTUAL_HEIGHT / 2f, 0);
 
+        // Hitung jumlah kolom/baris floor berdasarkan ukuran tile
+        FLOOR_COLS = (int)Math.ceil(VIRTUAL_WIDTH / FLOOR_TILE_SIZE);
+        FLOOR_ROWS = (int)Math.ceil(VIRTUAL_HEIGHT / FLOOR_TILE_SIZE);
+
+        // Renderer
         shapeRenderer = new ShapeRenderer();
         batch = new SpriteBatch();
         font = new BitmapFont();
         font.setColor(Color.WHITE);
 
-        // Load sprite player
-        playerTexture = new Texture("jonatan.png");
-        float scale = 0.4f;
-        float pw = playerTexture.getWidth() * scale;
-        float ph = playerTexture.getHeight() * scale;
 
-        // Player di tengah ruangan
+        // Cameras
+        worldCamera = new OrthographicCamera();
+        worldViewport = new FitViewport(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, worldCamera);
+        worldCamera.zoom = CAMERA_ZOOM;
+
+        uiCamera = new OrthographicCamera();
+        uiCamera.setToOrtho(false, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+
+        // Sistem eksternal
+        cameraController = new CameraController(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        lightingSystem = new LightingSystem();
+        hudRenderer = new HudRenderer();
+
+        // --------- LOAD FLOOR TEXTURES ---------
+        // Pastikan file-file ini ada di assets/
+        floorTex1 = new Texture("floor_tiles_1.png");
+        floorTex2 = new Texture("floor_tiles_2.png");
+        floorTex3 = new Texture("floor_tiles_3.png");
+
+        floorTiles1 = splitFloorTiles(floorTex1);
+        floorTiles2 = splitFloorTiles(floorTex2);
+        floorTiles3 = splitFloorTiles(floorTex3);
+
+        vignetteTexture = new Texture("vignette.png");
+
+        // Texture sementara hanya untuk ukuran awal player (placeholder)
+        playerTexture = new Texture("white.png");
+        float scale = 0.4f;
+        float pw = (playerTexture.getWidth() / 4f) * scale;
+        float ph = (playerTexture.getHeight() / 4f) * scale;
+
+        // Buat player di tengah room awal
         player = new Player(
             VIRTUAL_WIDTH / 2f - pw / 2f,
             VIRTUAL_HEIGHT / 2f - ph / 2f,
             pw,
             ph
         );
+        player.loadAnimations(); // player sendiri yang load sprite aslinya
 
+        // Room awal
         switchToRoom(RoomId.R5);
+
+        // Set kamera awal di player
+        cameraController.update(worldCamera, worldViewport, player);
     }
 
     private void switchToRoom(RoomId id) {
@@ -105,81 +180,111 @@ public class PlayScreen implements Screen {
         currentInteractable = null;
     }
 
+    // ======================
+    //  GAME LOOP
+    // ======================
+
     @Override
     public void render(float delta) {
+
         update(delta);
 
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        camera.update();
-        shapeRenderer.setProjectionMatrix(camera.combined);
-        batch.setProjectionMatrix(camera.combined);
-
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
 
+        // ---------- WORLD RENDER ----------
+        worldViewport.apply();
+        worldCamera.update();
+        shapeRenderer.setProjectionMatrix(worldCamera.combined);
+        batch.setProjectionMatrix(worldCamera.combined);
+
+        // 1) Gambar lantai dulu (pakai batch)
+        batch.begin();
+        drawFloor();
+        batch.end();
+
+        // 2) Shapes: lighting, walls, furniture, item
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Lighting
-        drawLighting();
-
-        // Walls
+        lightingSystem.render(shapeRenderer, player, flashlightOn, battery / BATTERY_MAX);
         drawWalls();
 
-        // Tables & lockers
-        for (Table table : currentRoom.getTables()) {
-            table.render(shapeRenderer);
-        }
-        for (Locker locker : currentRoom.getLockers()) {
-            locker.render(shapeRenderer);
-        }
+        for (Table t : currentRoom.getTables())
+            t.render(shapeRenderer);
 
-        // Interactable items (baterai)
-        for (Interactable inter : currentRoom.getInteractables()) {
-            if (inter.isActive()) {
-                inter.render(shapeRenderer);
-            }
-        }
+        for (Locker l : currentRoom.getLockers())
+            l.render(shapeRenderer);
 
-        // UI bar
-        drawUIBars();
+        for (Interactable i : currentRoom.getInteractables())
+            if (i.isActive())
+                i.render(shapeRenderer);
 
         shapeRenderer.end();
 
-        // Sprite + E prompt
+        // 3) Texture: player + prompt 'E' + vignette ambience
+        batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
 
-        // Player sprite
-        batch.draw(
-            playerTexture,
+        // player
+        TextureRegion frame = player.getCurrentFrame(isMoving);
+        batch.draw(frame,
             player.getX(),
             player.getY(),
             player.getWidth(),
             player.getHeight()
         );
 
+        // prompt E
         if (currentInteractable != null && currentInteractable.isActive()) {
-            float tx = currentInteractable.getCenterX();
-            float ty = currentInteractable.getCenterY() + 30f;
-            font.draw(batch, "E", tx - 4f, ty);
+            font.draw(batch,
+                "E",
+                currentInteractable.getCenterX() - 4,
+                currentInteractable.getCenterY() + 30
+            );
         }
 
+        // 3.5) Ambience gelap di sudut layar (vignette, hanya di world, HUD aman)
+        batch.setColor(1f, 1f, 1f, 0.8f); // pakai alpha 80%
+        float vx = worldCamera.position.x - VIRTUAL_WIDTH  / 2f;
+        float vy = worldCamera.position.y - VIRTUAL_HEIGHT / 2f;
+        batch.draw(vignetteTexture, vx, vy, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        batch.setColor(1f, 1f, 1f, 1f);   // reset
+
         batch.end();
+
+        // ---------- HUD RENDER (kamera UI) ----------
+        uiCamera.update();
+        shapeRenderer.setProjectionMatrix(uiCamera.combined);
+        batch.setProjectionMatrix(uiCamera.combined);
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        hudRenderer.render(shapeRenderer,
+            VIRTUAL_WIDTH,
+            VIRTUAL_HEIGHT,
+            stamina,
+            STAMINA_MAX,
+            battery,
+            BATTERY_MAX);
+        shapeRenderer.end();
 
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
+
     private void update(float delta) {
-        // kurangi cooldown dulu
-        if (transitionCooldown > 0f) {
+
+        if (transitionCooldown > 0) {
             transitionCooldown -= delta;
-            if (transitionCooldown < 0f) transitionCooldown = 0f;
+            if (transitionCooldown < 0) transitionCooldown = 0;
         }
 
         handleInput(delta);
+        player.update(delta, isMoving);
 
-        if (transitionCooldown <= 0f) {
+        if (transitionCooldown <= 0) {
             checkRoomTransition();
         }
 
@@ -187,142 +292,146 @@ public class PlayScreen implements Screen {
         findCurrentInteractable();
         handleInteractInput();
         currentRoom.cleanupInactive();
+
+        // Kamera update di akhir logic
+        cameraController.update(worldCamera, worldViewport, player);
     }
 
+    // ======================
+    //  INPUT & MOVEMENT
+    // ======================
 
     private void handleInput(float delta) {
-        float dx = 0f;
-        float dy = 0f;
+        float dx = 0f, dy = 0f;
 
         boolean up = Gdx.input.isKeyPressed(Input.Keys.W);
         boolean down = Gdx.input.isKeyPressed(Input.Keys.S);
         boolean left = Gdx.input.isKeyPressed(Input.Keys.A);
         boolean right = Gdx.input.isKeyPressed(Input.Keys.D);
 
-        if (up) dy += 1f;
-        if (down) dy -= 1f;
-        if (left) dx -= 1f;
-        if (right) dx += 1f;
+        if (up) dy += 1;
+        if (down) dy -= 1;
+        if (left) dx -= 1;
+        if (right) dx += 1;
 
-        boolean isMoving = (dx != 0 || dy != 0);
+        isMoving = (dx != 0 || dy != 0);
 
-        // Toggle flashlight dengan F
-        if (Gdx.input.isKeyJustPressed(Input.Keys.F) && battery > 0f) {
+        // Toggle flashlight
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F) && battery > 0)
             flashlightOn = !flashlightOn;
-        }
 
-        // Normalisasi arah gerak
+        // Normalize
         if (isMoving) {
             float len = (float) Math.sqrt(dx * dx + dy * dy);
-            if (len != 0) {
-                dx /= len;
-                dy /= len;
-            }
+            dx /= len;
+            dy /= len;
         }
 
-        // Sprint dengan Shift + butuh stamina
-        boolean shift = Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT) ||
-            Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT);
+        // Sprint
+        boolean shift = Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT)
+            || Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT);
 
         float speed = WALK_SPEED;
         boolean sprinting = false;
 
-        if (shift && stamina > 0f && isMoving) {
+        if (shift && stamina > 0 && isMoving) {
             speed = RUN_SPEED;
             sprinting = true;
         }
 
-        // Gerakkan player
-        if (isMoving) {
+        if (isMoving)
             player.move(dx * speed * delta, dy * speed * delta);
-        }
 
-        // Update stamina
-        if (sprinting) {
-            stamina -= STAMINA_DRAIN_RATE * delta;
-            if (stamina < 0f) stamina = 0f;
-        } else if (!isMoving) {
-            stamina += STAMINA_REGEN_RATE * delta;
-            if (stamina > STAMINA_MAX) stamina = STAMINA_MAX;
-        }
+        // Stamina
+        if (sprinting) stamina -= STAMINA_DRAIN_RATE * delta;
+        else if (!isMoving) stamina += STAMINA_REGEN_RATE * delta;
+
+        if (stamina < 0) stamina = 0;
+        if (stamina > STAMINA_MAX) stamina = STAMINA_MAX;
     }
 
     private void checkRoomTransition() {
-        float centerX = player.getCenterX();
-        float centerY = player.getCenterY();
+
+        float cx = player.getCenterX();
+        float cy = player.getCenterY();
 
         float doorMinX = VIRTUAL_WIDTH / 2f - DOOR_WIDTH / 2f;
         float doorMaxX = VIRTUAL_WIDTH / 2f + DOOR_WIDTH / 2f;
         float doorMinY = VIRTUAL_HEIGHT / 2f - DOOR_WIDTH / 2f;
         float doorMaxY = VIRTUAL_HEIGHT / 2f + DOOR_WIDTH / 2f;
 
-        transitionCooldown = TRANSITION_COOLDOWN_DURATION;
-
         boolean moved = false;
 
-        // TOP
+        // ATAS
         if (player.getY() + player.getHeight() >= VIRTUAL_HEIGHT - WALL_THICKNESS) {
             RoomId up = currentRoomId.up();
-            if (up != null && centerX >= doorMinX && centerX <= doorMaxX) {
+            if (up != null && cx >= doorMinX && cx <= doorMaxX) {
                 switchToRoom(up);
-                player.setY(1f);
+                float newY = WALL_THICKNESS + ENTRY_OFFSET;
+                player.setY(newY);
                 moved = true;
-                transitionCooldown = TRANSITION_COOLDOWN_DURATION; // ← TAMBAH INI
             } else {
                 player.setY(VIRTUAL_HEIGHT - player.getHeight() - WALL_THICKNESS);
             }
         }
 
-
-        // BOTTOM
+        // BAWAH
         if (!moved && player.getY() <= WALL_THICKNESS) {
             RoomId down = currentRoomId.down();
-            if (down != null && centerX >= doorMinX && centerX <= doorMaxX) {
+            if (down != null && cx >= doorMinX && cx <= doorMaxX) {
                 switchToRoom(down);
-                player.setY(VIRTUAL_HEIGHT - player.getHeight() - 1f);
+                float newY = VIRTUAL_HEIGHT - WALL_THICKNESS - player.getHeight() - ENTRY_OFFSET;
+                player.setY(newY);
                 moved = true;
-                transitionCooldown = TRANSITION_COOLDOWN_DURATION; // ←
             } else {
                 player.setY(WALL_THICKNESS);
             }
         }
 
-        // RIGHT
+        // KANAN
         if (!moved && player.getX() + player.getWidth() >= VIRTUAL_WIDTH - WALL_THICKNESS) {
             RoomId right = currentRoomId.right();
-            if (right != null && centerY >= doorMinY && centerY <= doorMaxY) {
+            if (right != null && cy >= doorMinY && cy <= doorMaxY) {
                 switchToRoom(right);
-                player.setX(1f);
+                float newX = WALL_THICKNESS + ENTRY_OFFSET;
+                player.setX(newX);
                 moved = true;
-                transitionCooldown = TRANSITION_COOLDOWN_DURATION; // ←
             } else {
                 player.setX(VIRTUAL_WIDTH - player.getWidth() - WALL_THICKNESS);
             }
         }
 
-        // LEFT
+        // KIRI
         if (!moved && player.getX() <= WALL_THICKNESS) {
             RoomId left = currentRoomId.left();
-            if (left != null && centerY >= doorMinY && centerY <= doorMaxY) {
+            if (left != null && cy >= doorMinY && cy <= doorMaxY) {
                 switchToRoom(left);
-                player.setX(VIRTUAL_WIDTH - player.getWidth() - 1f);
+                float newX = VIRTUAL_WIDTH - WALL_THICKNESS - player.getWidth() - ENTRY_OFFSET;
+                player.setX(newX);
                 moved = true;
-                transitionCooldown = TRANSITION_COOLDOWN_DURATION; // ←
             } else {
                 player.setX(WALL_THICKNESS);
             }
         }
+
+        if (moved) {
+            transitionCooldown = TRANSITION_COOLDOWN_DURATION;
+        }
     }
 
     private void updateBattery(float delta) {
-        if (flashlightOn && battery > 0f) {
+        if (flashlightOn && battery > 0) {
             battery -= BATTERY_DRAIN_RATE * delta;
-            if (battery <= 0f) {
-                battery = 0f;
+            if (battery <= 0) {
+                battery = 0;
                 flashlightOn = false;
             }
         }
     }
+
+    // ======================
+    //  INTERACTION
+    // ======================
 
     private void findCurrentInteractable() {
         currentInteractable = null;
@@ -331,30 +440,27 @@ public class PlayScreen implements Screen {
         float px = player.getCenterX();
         float py = player.getCenterY();
 
-        // Items
-        List<Interactable> interactables = currentRoom.getInteractables();
-        for (Interactable inter : interactables) {
-            if (!inter.isActive()) continue;
-            if (!inter.canInteract(player)) continue;
+        for (Interactable inter : currentRoom.getInteractables()) {
+            if (!inter.isActive() || !inter.canInteract(player)) continue;
 
             float dx = inter.getCenterX() - px;
             float dy = inter.getCenterY() - py;
             float dist2 = dx * dx + dy * dy;
+
             if (dist2 < bestDist2 && dist2 <= INTERACT_RANGE * INTERACT_RANGE) {
                 bestDist2 = dist2;
                 currentInteractable = inter;
             }
         }
 
-        // Lockers (juga interactable)
         for (Locker locker : currentRoom.getLockers()) {
-            if (!locker.isActive()) continue;
-            if (!locker.canInteract(player)) continue;
+            if (!locker.isActive() || !locker.canInteract(player)) continue;
 
             float dx = locker.getCenterX() - px;
             float dy = locker.getCenterY() - py;
             float dist2 = dx * dx + dy * dy;
-            if (dist2 < bestDist2 && dist2 <= INTERACT_RANGE * INTERACT_RANGE) {
+
+            if (dist2 < bestDist2) {
                 bestDist2 = dist2;
                 currentInteractable = locker;
             }
@@ -368,182 +474,163 @@ public class PlayScreen implements Screen {
 
             InteractionResult result = currentInteractable.interact();
             if (result != null) {
-                float deltaBattery = result.getBatteryDelta();
-                if (deltaBattery != 0f) {
-                    battery = Math.min(BATTERY_MAX, battery + deltaBattery);
-                }
+                battery = Math.min(BATTERY_MAX, battery + result.getBatteryDelta());
             }
         }
     }
 
-    private void drawLighting() {
-        float cx = player.getCenterX();
-        float cy = player.getCenterY();
-
-        // Lingkaran vision default: abu-abu
-        Color softGray = new Color(0.3f, 0.3f, 0.3f, 1f);
-        shapeRenderer.setColor(softGray);
-        float baseRadius = 80f;
-        shapeRenderer.circle(cx, cy, baseRadius);
-
-        // Flashlight cone kuning
-        if (flashlightOn && battery > 0f) {
-            Color coneColor = new Color(1f, 1f, 0.6f, 0.85f);
-            shapeRenderer.setColor(coneColor);
-
-            float coneLength = 200f;
-            float coneHalfWidth = 60f;
-
-            float x1 = cx;
-            float y1 = cy;
-
-            float x2 = cx;
-            float y2 = cy;
-            float x3 = cx;
-            float y3 = cy;
-
-            switch (player.getDirection()) {
-                case UP:
-                    x2 = cx - coneHalfWidth;
-                    y2 = cy + coneLength;
-                    x3 = cx + coneHalfWidth;
-                    y3 = cy + coneLength;
-                    break;
-                case DOWN:
-                    x2 = cx - coneHalfWidth;
-                    y2 = cy - coneLength;
-                    x3 = cx + coneHalfWidth;
-                    y3 = cy - coneLength;
-                    break;
-                case LEFT:
-                    x2 = cx - coneLength;
-                    y2 = cy - coneHalfWidth;
-                    x3 = cx - coneLength;
-                    y3 = cy + coneHalfWidth;
-                    break;
-                case RIGHT:
-                    x2 = cx + coneLength;
-                    y2 = cy - coneHalfWidth;
-                    x3 = cx + coneLength;
-                    y3 = cy + coneHalfWidth;
-                    break;
-            }
-
-            shapeRenderer.triangle(x1, y1, x2, y2, x3, y3);
-        }
-    }
+    // ======================
+    //  WALLS
+    // ======================
 
     private void drawWalls() {
-        shapeRenderer.setColor(0.4f, 0.4f, 0.4f, 1f);
+        shapeRenderer.setColor(0.4f, 0.4f, 0.4f, 1);
 
         float doorMinX = VIRTUAL_WIDTH / 2f - DOOR_WIDTH / 2f;
         float doorMaxX = VIRTUAL_WIDTH / 2f + DOOR_WIDTH / 2f;
         float doorMinY = VIRTUAL_HEIGHT / 2f - DOOR_WIDTH / 2f;
         float doorMaxY = VIRTUAL_HEIGHT / 2f + DOOR_WIDTH / 2f;
 
-        // TOP
+        // Top
         if (currentRoomId.hasUp()) {
-            // kiri segmen
-            shapeRenderer.rect(0f, VIRTUAL_HEIGHT - WALL_THICKNESS,
+            shapeRenderer.rect(0, VIRTUAL_HEIGHT - WALL_THICKNESS,
                 doorMinX, WALL_THICKNESS);
-            // kanan segmen
             shapeRenderer.rect(doorMaxX, VIRTUAL_HEIGHT - WALL_THICKNESS,
                 VIRTUAL_WIDTH - doorMaxX, WALL_THICKNESS);
         } else {
-            shapeRenderer.rect(0f, VIRTUAL_HEIGHT - WALL_THICKNESS,
+            shapeRenderer.rect(0, VIRTUAL_HEIGHT - WALL_THICKNESS,
                 VIRTUAL_WIDTH, WALL_THICKNESS);
         }
 
-        // BOTTOM
+        // Bottom
         if (currentRoomId.hasDown()) {
-            shapeRenderer.rect(0f, 0f,
-                doorMinX, WALL_THICKNESS);
-            shapeRenderer.rect(doorMaxX, 0f,
+            shapeRenderer.rect(0, 0, doorMinX, WALL_THICKNESS);
+            shapeRenderer.rect(doorMaxX, 0,
                 VIRTUAL_WIDTH - doorMaxX, WALL_THICKNESS);
         } else {
-            shapeRenderer.rect(0f, 0f,
-                VIRTUAL_WIDTH, WALL_THICKNESS);
+            shapeRenderer.rect(0, 0, VIRTUAL_WIDTH, WALL_THICKNESS);
         }
 
-        // LEFT
+        // Left
         if (currentRoomId.hasLeft()) {
-            shapeRenderer.rect(0f, 0f,
-                WALL_THICKNESS, doorMinY);
-            shapeRenderer.rect(0f, doorMaxY,
+            shapeRenderer.rect(0, 0, WALL_THICKNESS, doorMinY);
+            shapeRenderer.rect(0, doorMaxY,
                 WALL_THICKNESS, VIRTUAL_HEIGHT - doorMaxY);
         } else {
-            shapeRenderer.rect(0f, 0f,
-                WALL_THICKNESS, VIRTUAL_HEIGHT);
+            shapeRenderer.rect(0, 0, WALL_THICKNESS, VIRTUAL_HEIGHT);
         }
 
-        // RIGHT
+        // Right
         if (currentRoomId.hasRight()) {
-            shapeRenderer.rect(VIRTUAL_WIDTH - WALL_THICKNESS, 0f,
+            shapeRenderer.rect(VIRTUAL_WIDTH - WALL_THICKNESS, 0,
                 WALL_THICKNESS, doorMinY);
             shapeRenderer.rect(VIRTUAL_WIDTH - WALL_THICKNESS, doorMaxY,
                 WALL_THICKNESS, VIRTUAL_HEIGHT - doorMaxY);
         } else {
-            shapeRenderer.rect(VIRTUAL_WIDTH - WALL_THICKNESS, 0f,
+            shapeRenderer.rect(VIRTUAL_WIDTH - WALL_THICKNESS, 0,
                 WALL_THICKNESS, VIRTUAL_HEIGHT);
         }
     }
 
-    private void drawUIBars() {
-        float margin = 10f;
-        float barHeight = 10f;
+    // ======================
+    //  FLOOR HELPERS
+    // ======================
 
-        // Flashlight bar 4 segmen kuning
-        float segmentWidth = 30f;
-        float gap = 4f;
-        float totalWidth = 4 * segmentWidth + 3 * gap;
+    // Memecah 1 texture 4x4 jadi array 16 tile
+    private TextureRegion[] splitFloorTiles(Texture tex) {
+        int COLS = 4;
+        int ROWS = 4;
 
-        float startX = margin;
-        float startY = VIRTUAL_HEIGHT - margin - barHeight;
+        TextureRegion[][] tmp = TextureRegion.split(
+            tex,
+            tex.getWidth() / COLS,
+            tex.getHeight() / ROWS
+        );
 
-        int activeSegments = (int) Math.ceil(battery * 4f);
-        if (activeSegments < 0) activeSegments = 0;
-        if (activeSegments > 4) activeSegments = 4;
-
-        for (int i = 0; i < 4; i++) {
-            float x = startX + i * (segmentWidth + gap);
-            if (i < activeSegments) {
-                shapeRenderer.setColor(Color.YELLOW);
-            } else {
-                shapeRenderer.setColor(0.3f, 0.3f, 0.1f, 1f);
+        TextureRegion[] flat = new TextureRegion[COLS * ROWS];
+        int idx = 0;
+        for (int r = 0; r < ROWS; r++) {
+            for (int c = 0; c < COLS; c++) {
+                flat[idx++] = tmp[r][c];
             }
-            shapeRenderer.rect(x, startY, segmentWidth, barHeight);
+        }
+        return flat;
+    }
+
+    // Ambil / generate grid lantai untuk room saat ini
+    private TextureRegion[][] getFloorForCurrentRoom() {
+        TextureRegion[][] grid = roomFloors.get(currentRoomId);
+        if (grid == null) {
+            grid = generateFloorForRoom(currentRoomId);
+            roomFloors.put(currentRoomId, grid);
+        }
+        return grid;
+    }
+
+    private TextureRegion[][] generateFloorForRoom(RoomId id) {
+        TextureRegion[] pool;
+
+        // pilih salah satu tileset sebagai "tema" room ini
+        int choice = rng.nextInt(3);
+        switch (choice) {
+            default:
+            case 0: pool = floorTiles1; break;
+            case 1: pool = floorTiles2; break;
+            case 2: pool = floorTiles3; break;
         }
 
-        // Stamina bar biru di bawahnya
-        float staminaMaxWidth = totalWidth;
-        float staminaX = margin;
-        float staminaY = startY - barHeight - 6f;
+        TextureRegion[][] grid = new TextureRegion[FLOOR_ROWS][FLOOR_COLS];
 
-        shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 1f);
-        shapeRenderer.rect(staminaX, staminaY, staminaMaxWidth, barHeight);
+        // supaya pattern konsisten tiap kali balik ke room yang sama, seed based on RoomId
+        long seed = id.ordinal() * 99991L + 12345L;
+        Random r = new Random(seed);
 
-        float staminaWidth = staminaMaxWidth * stamina / STAMINA_MAX;
-        shapeRenderer.setColor(Color.CYAN);
-        shapeRenderer.rect(staminaX, staminaY, staminaWidth, barHeight);
+        for (int row = 0; row < FLOOR_ROWS; row++) {
+            for (int col = 0; col < FLOOR_COLS; col++) {
+                grid[row][col] = pool[r.nextInt(pool.length)];
+            }
+        }
+        return grid;
     }
+
+    private void drawFloor() {
+        TextureRegion[][] grid = getFloorForCurrentRoom();
+
+        float tileW = FLOOR_TILE_SIZE;
+        float tileH = FLOOR_TILE_SIZE;
+
+        // gelapkan semua lantai → ambience ruangannya gelap
+        Color oldColor = batch.getColor();
+        batch.setColor(0.35f, 0.35f, 0.35f, 1f);
+
+        for (int row = 0; row < FLOOR_ROWS; row++) {
+            for (int col = 0; col < FLOOR_COLS; col++) {
+                TextureRegion region = grid[row][col];
+                if (region == null) continue;
+
+                float x = col * tileW;
+                float y = row * tileH;
+                batch.draw(region, x, y, tileW, tileH);
+            }
+        }
+
+        batch.setColor(oldColor);
+    }
+
+    // ======================
+    //  LIFECYCLE
+    // ======================
 
     @Override
     public void resize(int width, int height) {
-        viewport.update(width, height);
-        camera.position.set(VIRTUAL_WIDTH / 2f, VIRTUAL_HEIGHT / 2f, 0);
+        worldViewport.update(width, height);
+        uiCamera.setToOrtho(false, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     }
 
-    @Override
-    public void show() { }
-
-    @Override
-    public void hide() { }
-
-    @Override
-    public void pause() { }
-
-    @Override
-    public void resume() { }
+    @Override public void show() {}
+    @Override public void hide() {}
+    @Override public void pause() {}
+    @Override public void resume() {}
 
     @Override
     public void dispose() {
@@ -551,5 +638,12 @@ public class PlayScreen implements Screen {
         batch.dispose();
         font.dispose();
         playerTexture.dispose();
+
+        floorTex1.dispose();
+        floorTex2.dispose();
+        floorTex3.dispose();
+
+        vignetteTexture.dispose();
     }
+
 }
