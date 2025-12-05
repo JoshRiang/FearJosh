@@ -22,9 +22,9 @@ import com.fearjosh.frontend.factory.RoomFactory;
 import com.fearjosh.frontend.render.HudRenderer;
 import com.fearjosh.frontend.render.LightingSystem;
 import com.fearjosh.frontend.world.*;
+import com.fearjosh.frontend.manager.GameManager;
 
 import java.util.EnumMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
@@ -99,6 +99,7 @@ public class PlayScreen implements Screen {
     private LightingSystem lightingSystem;
     private HudRenderer hudRenderer;
     private boolean paused = false;
+    private com.badlogic.gdx.math.Rectangle resumeButtonBounds = new com.badlogic.gdx.math.Rectangle();
 
     // ------------ FLOOR TILES ------------
     // ukuran world untuk 1 tile lantai (lebih kecil -> lebih rapat)
@@ -165,29 +166,30 @@ public class PlayScreen implements Screen {
         // Create light texture for vision circle
         lightTexture = createLightTexture(512);
 
+        // Initialize game manager (singleton)
+        GameManager gm = GameManager.getInstance();
+        gm.initIfNeeded(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+
+        // Use singleton player
+        player = gm.getPlayer();
+
         // Texture sementara hanya untuk ukuran awal player (placeholder)
         playerTexture = new Texture("white.png");
-        float scale = 0.4f;
-        float pw = (playerTexture.getWidth() / 4f) * scale;
-        float ph = (playerTexture.getHeight() / 4f) * scale;
 
-        // Buat player di tengah room awal
-        player = new Player(
-                VIRTUAL_WIDTH / 2f - pw / 2f,
-                VIRTUAL_HEIGHT / 2f - ph / 2f,
-                pw,
-                ph);
-        player.loadAnimations(); // player sendiri yang load sprite aslinya
-
-        // Room awal
-        switchToRoom(RoomId.R5);
+        // Room via GameManager
+        currentRoomId = gm.getCurrentRoomId();
+        switchToRoom(currentRoomId);
 
         // Set kamera awal di player
         cameraController.update(worldCamera, worldViewport, player);
+
+        // Cache this screen instance for resume
+        gm.setPlayScreen(this);
     }
 
     private void switchToRoom(RoomId id) {
         currentRoomId = id;
+        GameManager.getInstance().setCurrentRoomId(id);
         currentRoom = rooms.computeIfAbsent(id,
                 rid -> RoomFactory.createRoom(rid, VIRTUAL_WIDTH, VIRTUAL_HEIGHT));
         currentInteractable = null;
@@ -292,25 +294,67 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // If paused, draw a simple overlay
+        // If paused, draw overlay with Resume button and handle inputs
         if (paused) {
-            batch.setProjectionMatrix(uiCamera.combined);
-            batch.begin();
-            // dim background overlay
-            batch.end();
-
+            // Draw dim backdrop and panel
             shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
             shapeRenderer.setColor(0f, 0f, 0f, 0.35f);
             shapeRenderer.rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
             shapeRenderer.setColor(0.12f, 0.12f, 0.15f, 0.9f);
-            float w = 360f, h = 120f;
-            shapeRenderer.rect((VIRTUAL_WIDTH - w) / 2f, (VIRTUAL_HEIGHT - h) / 2f, w, h);
+            float panelW = 360f, panelH = 140f;
+            float panelX = (VIRTUAL_WIDTH - panelW) / 2f;
+            float panelY = (VIRTUAL_HEIGHT - panelH) / 2f;
+            shapeRenderer.rect(panelX, panelY, panelW, panelH);
+
+            // Resume button inside panel
+            float btnW = 160f, btnH = 36f;
+            float btnX = panelX + (panelW - btnW) / 2f;
+            float btnY = panelY + 18f;
+            resumeButtonBounds.set(btnX, btnY, btnW, btnH);
+            shapeRenderer.setColor(0.18f, 0.18f, 0.22f, 1f);
+            shapeRenderer.rect(btnX, btnY, btnW, btnH);
+            // Main Menu button
+            float menuBtnW = 160f, menuBtnH = 36f;
+            float menuBtnX = panelX + (panelW - menuBtnW) / 2f;
+            float menuBtnY = btnY + btnH + 10f;
+            shapeRenderer.setColor(0.18f, 0.18f, 0.22f, 1f);
+            shapeRenderer.rect(menuBtnX, menuBtnY, menuBtnW, menuBtnH);
             shapeRenderer.end();
 
+            // Text
+            batch.setProjectionMatrix(uiCamera.combined);
             batch.begin();
-            font.draw(batch, "Paused", VIRTUAL_WIDTH / 2f - 36f, VIRTUAL_HEIGHT / 2f + 24f);
-            font.draw(batch, "Click pause to resume", VIRTUAL_WIDTH / 2f - 96f, VIRTUAL_HEIGHT / 2f - 8f);
+            font.draw(batch, "Paused", VIRTUAL_WIDTH / 2f - 36f, panelY + panelH - 18f);
+            font.draw(batch, "Resume", btnX + 52f, btnY + 24f);
+            font.draw(batch, "Main Menu", menuBtnX + 40f, menuBtnY + 24f);
             batch.end();
+
+            // Keyboard shortcuts to resume
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) ||
+                    Gdx.input.isKeyJustPressed(Input.Keys.SPACE) ||
+                    Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                paused = false;
+            }
+
+            // Mouse click on Resume or Main Menu
+            if (Gdx.input.justTouched()) {
+                float sx = Gdx.input.getX();
+                float sy = Gdx.input.getY();
+                com.badlogic.gdx.math.Vector3 ui = uiCamera.unproject(new com.badlogic.gdx.math.Vector3(sx, sy, 0));
+                if (resumeButtonBounds.contains(ui.x, ui.y)) {
+                    paused = false;
+                } else {
+                    // Test main menu button area
+                    float testW = 160f, testH = 36f;
+                    float testX = panelX + (panelW - testW) / 2f;
+                    float testY = btnY + btnH + 10f;
+                    if (ui.x >= testX && ui.x <= testX + testW && ui.y >= testY && ui.y <= testY + testH) {
+                        // Go back to main menu without resetting session
+                        com.fearjosh.frontend.FearJosh app = this.game;
+                        app.setScreen(new com.fearjosh.frontend.screen.MainMenuScreen(app));
+                    }
+                }
+            }
         }
 
         Gdx.gl.glDisable(GL20.GL_BLEND);

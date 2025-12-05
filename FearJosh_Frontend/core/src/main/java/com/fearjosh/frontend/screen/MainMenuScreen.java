@@ -18,6 +18,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.fearjosh.frontend.FearJosh;
+import com.fearjosh.frontend.manager.GameManager;
 
 /**
  * Simple main menu screen with Play, Settings, and Quit.
@@ -102,7 +103,11 @@ public class MainMenuScreen implements Screen {
         Label subtitle = new Label("A stealth-horror experience", skin);
         subtitle.setColor(new Color(0.85f, 0.85f, 0.9f, 1f));
 
-        TextButton playBtn = new TextButton("Play", skin);
+        // Determine session state
+        boolean hasSession = GameManager.getInstance().hasActiveSession();
+
+        TextButton playBtn = new TextButton(hasSession ? "New Game" : "New Game", skin);
+        TextButton resumeBtn = hasSession ? new TextButton("Resume", skin) : null;
         TextButton settingsBtn = new TextButton("Settings", skin);
         TextButton quitBtn = new TextButton("Quit", skin);
 
@@ -112,6 +117,9 @@ public class MainMenuScreen implements Screen {
         card.add(title).padTop(18f).padBottom(6f).row();
         card.add(subtitle).padBottom(24f).row();
         card.add(playBtn).width(btnWidth).height(btnHeight).pad(6f).row();
+        if (resumeBtn != null) {
+            card.add(resumeBtn).width(btnWidth).height(btnHeight).pad(6f).row();
+        }
         card.add(settingsBtn).width(btnWidth).height(btnHeight).pad(6f).row();
         card.add(quitBtn).width(btnWidth).height(btnHeight).padBottom(18f).row();
 
@@ -120,9 +128,26 @@ public class MainMenuScreen implements Screen {
         playBtn.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
+                // Start a brand new game
+                GameManager.getInstance().resetNewGame(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
                 game.setScreen(new PlayScreen(game));
             }
         });
+
+        if (resumeBtn != null) {
+            resumeBtn.addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    // Resume current session using cached screen if available
+                    GameManager gm = GameManager.getInstance();
+                    if (gm.getPlayScreen() != null) {
+                        game.setScreen(gm.getPlayScreen());
+                    } else {
+                        game.setScreen(new PlayScreen(game));
+                    }
+                }
+            });
+        }
 
         settingsBtn.addListener(new ClickListener() {
             @Override
