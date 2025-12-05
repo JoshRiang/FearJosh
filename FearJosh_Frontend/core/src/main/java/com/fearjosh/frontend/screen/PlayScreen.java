@@ -98,6 +98,7 @@ public class PlayScreen implements Screen {
     private CameraController cameraController;
     private LightingSystem lightingSystem;
     private HudRenderer hudRenderer;
+    private boolean paused = false;
 
     // ------------ FLOOR TILES ------------
     // ukuran world untuk 1 tile lantai (lebih kecil -> lebih rapat)
@@ -198,8 +199,9 @@ public class PlayScreen implements Screen {
 
     @Override
     public void render(float delta) {
-
-        update(delta);
+        if (!paused) {
+            update(delta);
+        }
 
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
@@ -276,6 +278,40 @@ public class PlayScreen implements Screen {
                 battery,
                 BATTERY_MAX);
         shapeRenderer.end();
+
+        // Handle pause button click in UI space
+        if (Gdx.input.justTouched()) {
+            float screenX = Gdx.input.getX();
+            float screenY = Gdx.input.getY();
+            // Convert to UI world coords
+            com.badlogic.gdx.math.Vector3 uiCoords = uiCamera
+                    .unproject(new com.badlogic.gdx.math.Vector3(screenX, screenY, 0));
+            com.badlogic.gdx.math.Rectangle r = hudRenderer.getPauseButtonBounds();
+            if (r.contains(uiCoords.x, uiCoords.y)) {
+                paused = !paused;
+            }
+        }
+
+        // If paused, draw a simple overlay
+        if (paused) {
+            batch.setProjectionMatrix(uiCamera.combined);
+            batch.begin();
+            // dim background overlay
+            batch.end();
+
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            shapeRenderer.setColor(0f, 0f, 0f, 0.35f);
+            shapeRenderer.rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+            shapeRenderer.setColor(0.12f, 0.12f, 0.15f, 0.9f);
+            float w = 360f, h = 120f;
+            shapeRenderer.rect((VIRTUAL_WIDTH - w) / 2f, (VIRTUAL_HEIGHT - h) / 2f, w, h);
+            shapeRenderer.end();
+
+            batch.begin();
+            font.draw(batch, "Paused", VIRTUAL_WIDTH / 2f - 36f, VIRTUAL_HEIGHT / 2f + 24f);
+            font.draw(batch, "Click pause to resume", VIRTUAL_WIDTH / 2f - 96f, VIRTUAL_HEIGHT / 2f - 8f);
+            batch.end();
+        }
 
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
