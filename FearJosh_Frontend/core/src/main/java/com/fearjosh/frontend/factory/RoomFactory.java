@@ -11,10 +11,10 @@ import java.util.List;
 public class RoomFactory {
 
     private static final float WALL_MARGIN = 40f;
-    private static final float LOCKER_WIDTH = 30f;
+    private static final float LOCKER_WIDTH = 40f;
     private static final float LOCKER_HEIGHT = 80f;
-    private static final float TABLE_WIDTH = 80f;
-    private static final float TABLE_HEIGHT = 30f;
+    private static final float TABLE_WIDTH = 75f;
+    private static final float TABLE_HEIGHT = 45f;
 
     private static final float DOOR_WIDTH = 80f;
     private static final float DOOR_THICKNESS = 20f;
