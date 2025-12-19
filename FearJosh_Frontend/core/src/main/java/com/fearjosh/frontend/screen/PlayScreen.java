@@ -17,6 +17,7 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.fearjosh.frontend.FearJosh;
 import com.fearjosh.frontend.camera.CameraController;
+import com.fearjosh.frontend.entity.Enemy;
 import com.fearjosh.frontend.entity.Player;
 import com.fearjosh.frontend.factory.RoomFactory;
 import com.fearjosh.frontend.render.HudRenderer;
@@ -54,6 +55,7 @@ public class PlayScreen implements Screen {
     private BitmapFont font;
 
     private Player player;
+    private Enemy josh;
     private Texture playerTexture; // hanya dipakai untuk ukuran awal
     // overlay ambience gelap (vignette)
     private Texture vignetteTexture;
@@ -179,6 +181,17 @@ public class PlayScreen implements Screen {
         currentRoomId = gm.getCurrentRoomId();
         switchToRoom(currentRoomId);
 
+        // === NEW: spawn Josh (Enemy) - DISABLED FOR NOW ===
+        // float enemyW = 24f;
+        // float enemyH = 36f;
+        // josh = new Enemy(
+        //         player.getX() + 120f,   // sedikit di kanan player
+        //         player.getY() + 60f,    // sedikit di atas player
+        //         enemyW,
+        //         enemyH
+        // );
+        // ==================================================
+
         // Set kamera awal di player
         cameraController.update(worldCamera, worldViewport, player);
 
@@ -192,6 +205,12 @@ public class PlayScreen implements Screen {
         currentRoom = rooms.computeIfAbsent(id,
                 rid -> RoomFactory.createRoom(rid, VIRTUAL_WIDTH, VIRTUAL_HEIGHT));
         currentInteractable = null;
+
+        // === NEW: Handle Josh saat room transition - DISABLED FOR NOW ===
+        // if (josh != null && josh.getCurrentStateType() == com.fearjosh.frontend.state.enemy.EnemyStateType.CHASING) {
+        //     // Josh akan despawn dan respawn dekat player nanti
+        // }
+        // ================================================================
     }
 
     // ======================
@@ -216,27 +235,35 @@ public class PlayScreen implements Screen {
         shapeRenderer.setProjectionMatrix(worldCamera.combined);
         batch.setProjectionMatrix(worldCamera.combined);
 
-        // 1) Gambar lantai dulu (pakai batch)
+        // 1) Gambar lantai + meja + locker (pakai batch)
+        batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
-        drawFloor();
-        batch.end();
 
-        // 2) Shapes: lighting, walls, furniture, item
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-
-        lightingSystem.render(shapeRenderer, player, flashlightOn, battery); // Disabled: using fog of war system
-                                                                             // instead
-        drawWalls();
+        drawFloor(); // lantai tile
 
         for (Table t : currentRoom.getTables())
-            t.render(shapeRenderer);
+            t.render(batch); // <-- sekarang pakai sprite meja
 
         for (Locker l : currentRoom.getLockers())
-            l.render(shapeRenderer);
+            l.render(batch); // <-- sekarang pakai sprite locker
+
+        batch.end();
+
+        // 2) Shapes: lighting, walls, item (masih pakai ShapeRenderer)
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        lightingSystem.render(shapeRenderer, player, flashlightOn, battery / BATTERY_MAX);
+        drawWalls();
 
         for (Interactable i : currentRoom.getInteractables())
             if (i.isActive())
                 i.render(shapeRenderer);
+
+        // === NEW: render Josh (sementara kotak merah pakai ShapeRenderer) - DISABLED FOR NOW ===
+                // if (josh != null) {
+                //     josh.render(shapeRenderer);
+                // }
+        // ========================================================================================
 
         shapeRenderer.end();
 
@@ -385,6 +412,22 @@ public class PlayScreen implements Screen {
         handleInteractInput();
         currentRoom.cleanupInactive();
 
+        // === NEW: update musuh (Josh) dengan collision handling - DISABLED FOR NOW ===
+        // if (josh != null) {
+        //     josh.update(player, currentRoom, delta);
+        //
+        //     // Check apakah Josh menabrak player (GAME OVER)
+        //     if (!josh.isDespawned() && checkEnemyPlayerCollision(josh, player)) {
+        //         // TODO: Trigger game over / death sequence
+        //         System.out.println("GAME OVER: Josh caught you!");
+        //         // Bisa redirect ke game over screen atau death screen
+        //     }
+        //
+        //     // Clamp Josh ke dalam ruangan (wall collision)
+        //     clampEnemyToRoom(josh);
+        // }
+        // ============================================================================
+
         // Kamera update di akhir logic
         cameraController.update(worldCamera, worldViewport, player);
     }
@@ -509,11 +552,43 @@ public class PlayScreen implements Screen {
     }
 
     private boolean overlapsRect(float x, float y, float w, float h,
-            float x2, float y2, float w2, float h2) {
+                                 float x2, float y2, float w2, float h2) {
         return x < x2 + w2 &&
                 x + w > x2 &&
                 y < y2 + h2 &&
                 y + h > y2;
+    }
+
+    // ========================
+    // ENEMY COLLISION HELPERS
+    // ========================
+
+    private boolean checkEnemyPlayerCollision(Enemy enemy, Player player) {
+        return overlapsRect(
+                enemy.getX(), enemy.getY(), enemy.getWidth(), enemy.getHeight(),
+                player.getX(), player.getY(), player.getWidth(), player.getHeight()
+        );
+    }
+
+    private void clampEnemyToRoom(Enemy enemy) {
+        float ex = enemy.getX();
+        float ey = enemy.getY();
+        float ew = enemy.getWidth();
+        float eh = enemy.getHeight();
+
+        // Clamp ke dalam ruangan (dengan wall thickness)
+        if (ex < WALL_THICKNESS) {
+            enemy.setX(WALL_THICKNESS);
+        }
+        if (ex + ew > VIRTUAL_WIDTH - WALL_THICKNESS) {
+            enemy.setX(VIRTUAL_WIDTH - ew - WALL_THICKNESS);
+        }
+        if (ey < WALL_THICKNESS) {
+            enemy.setY(WALL_THICKNESS);
+        }
+        if (ey + eh > VIRTUAL_HEIGHT - WALL_THICKNESS) {
+            enemy.setY(VIRTUAL_HEIGHT - eh - WALL_THICKNESS);
+        }
     }
 
     private void checkRoomTransition() {
@@ -960,8 +1035,10 @@ public class PlayScreen implements Screen {
         floorTex3.dispose();
 
         vignetteTexture.dispose();
+        Table.disposeTexture();
         lightTexture.dispose();
         darknessFrameBuffer.dispose();
     }
 
 }
+

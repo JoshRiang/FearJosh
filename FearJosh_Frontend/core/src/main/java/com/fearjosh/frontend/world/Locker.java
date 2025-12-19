@@ -1,5 +1,7 @@
 package com.fearjosh.frontend.world;
 
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.fearjosh.frontend.entity.Player;
 
@@ -12,6 +14,8 @@ public class Locker implements Interactable {
     private boolean active = true;
     private Battery containedBattery;
     private final List<Interactable> roomInteractables;
+    private Texture closedTexture;
+    private Texture openTexture;
 
     public Locker(float x, float y, float width, float height, List<Interactable> roomInteractables) {
         this.x = x;
@@ -19,6 +23,8 @@ public class Locker implements Interactable {
         this.width = width;
         this.height = height;
         this.roomInteractables = roomInteractables;
+        this.closedTexture = new Texture("locker_closed.png");
+        this.openTexture = new Texture("locker_open.png");
     }
 
     public void setContainedBattery(Battery battery) {
@@ -51,18 +57,12 @@ public class Locker implements Interactable {
 
     @Override
     public void render(ShapeRenderer renderer) {
-        if (!opened) {
-            // Loker tertutup (abu-abu agak gelap)
-            renderer.setColor(0.6f, 0.6f, 0.6f, 1f);
-            renderer.rect(x, y, width, height);
-        } else {
-            // Loker terbuka (abu-abu lebih terang + garis pintu)
-            renderer.setColor(0.8f, 0.8f, 0.8f, 1f);
-            renderer.rect(x, y, width, height);
+        // This method is kept for interface compatibility but textures are rendered in PlayScreen
+    }
 
-            renderer.setColor(0.5f, 0.5f, 0.5f, 1f);
-            renderer.rectLine(x + width * 0.25f, y, x + width * 0.25f, y + height, 2f);
-        }
+    public void render(SpriteBatch batch) {
+        Texture texture = opened ? openTexture : closedTexture;
+        batch.draw(texture, x, y, width, height);
     }
 
     @Override
@@ -95,5 +95,10 @@ public class Locker implements Interactable {
             active = false;
         }
         return InteractionResult.NONE;
+    }
+
+    public void dispose() {
+        if (closedTexture != null) closedTexture.dispose();
+        if (openTexture != null) openTexture.dispose();
     }
 }
