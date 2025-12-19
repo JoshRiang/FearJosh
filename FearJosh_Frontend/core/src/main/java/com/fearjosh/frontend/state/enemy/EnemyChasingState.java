@@ -34,7 +34,7 @@ public class EnemyChasingState implements EnemyState {
 
         float collisionDist2 = COLLISION_DISTANCE * COLLISION_DISTANCE;
         if (len2 <= collisionDist2) {
-            // TODO: Trigger game over / player death
+            // [PLANNED] Collision detected - game over handled in PlayScreen.checkEnemyPlayerCollision()
         }
 
         if (len2 > Enemy.VISION_RADIUS * Enemy.VISION_RADIUS) {

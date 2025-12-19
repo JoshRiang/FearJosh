@@ -1,0 +1,38 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+bin/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Java
+*.class
+*.log
+*.jar
+!gradle-wrapper.jar
+hs_err_pid*
+
+# Backup files
+*.bak
+*.backup
+*.tmp
+*.swp
+*~
+
+# LibGDX
+assets/bin/

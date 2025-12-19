@@ -21,8 +21,8 @@ import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.scenes.scene2d.ui.ButtonGroup;
 import com.fearjosh.frontend.FearJosh;
-import com.fearjosh.frontend.manager.GameDifficulty;
-import com.fearjosh.frontend.manager.GameManager;
+import com.fearjosh.frontend.difficulty.GameDifficulty;
+import com.fearjosh.frontend.core.GameManager;
 
 /**
  * Minimal placeholder Settings screen with a Back button.

@@ -6,8 +6,8 @@ import com.badlogic.gdx.graphics.Color;
 import com.fearjosh.frontend.state.enemy.*;
 import com.fearjosh.frontend.world.Room;
 import com.fearjosh.frontend.world.RoomId;
-import com.fearjosh.frontend.world.Table;
-import com.fearjosh.frontend.world.Locker;
+import com.fearjosh.frontend.world.objects.Table;
+import com.fearjosh.frontend.world.objects.Locker;
 
 public class Enemy {
 
@@ -33,7 +33,9 @@ public class Enemy {
     private boolean isDespawned = false;
     private float respawnCheckTimer = 0f;
     private static final float RESPAWN_CHECK_INTERVAL = 2f;
-    private static final float RESPAWN_DISTANCE = 200f;
+    
+    // [PLANNED] Min distance from player when respawning - will be used in respawn logic
+    public static final float RESPAWN_DISTANCE = 200f;
 
     // Detection radii untuk debug visual
     public static final float DETECTION_RADIUS = 220f;  // hearing range (hijau)
@@ -164,7 +166,8 @@ public class Enemy {
     }
 
     public void render(SpriteBatch batch) {
-        // TODO: gambar texture Josh di sini
+        // [PLANNED] Render Josh sprite texture here when assets are ready
+        // Currently using ShapeRenderer in PlayScreen for placeholder rendering
     }
 
     // Movement dengan collision detection

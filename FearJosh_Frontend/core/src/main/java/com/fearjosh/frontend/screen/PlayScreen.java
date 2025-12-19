@@ -21,9 +21,12 @@ import com.fearjosh.frontend.entity.Enemy;
 import com.fearjosh.frontend.entity.Player;
 import com.fearjosh.frontend.factory.RoomFactory;
 import com.fearjosh.frontend.render.HudRenderer;
-import com.fearjosh.frontend.render.LightingSystem;
+import com.fearjosh.frontend.render.LightingRenderer;
 import com.fearjosh.frontend.world.*;
-import com.fearjosh.frontend.manager.GameManager;
+import com.fearjosh.frontend.world.objects.Table;
+import com.fearjosh.frontend.world.objects.Locker;
+import com.fearjosh.frontend.core.GameManager;
+import com.fearjosh.frontend.input.InputHandler;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -43,7 +46,6 @@ public class PlayScreen implements Screen {
     private static final float CAMERA_ZOOM = 0.7f;
 
     private static final float DOOR_WIDTH = 80f;
-    private static final float DOOR_THICKNESS = 20f;
     private static final float WALL_THICKNESS = 6f;
     private static final float ENTRY_OFFSET = 20f;
 
@@ -70,19 +72,20 @@ public class PlayScreen implements Screen {
     private RoomId currentRoomId = RoomId.R5;
     private Room currentRoom;
 
-    // Movement & stamina
+    // Movement speed constants
     private static final float WALK_SPEED = 150f;
-    private static final float RUN_SPEED = 260f;
-    private static final float STAMINA_MAX = 1f;
-    private static final float STAMINA_DRAIN_RATE = 0.4f;
-    private static final float STAMINA_REGEN_RATE = 0.25f;
-    private float stamina = STAMINA_MAX;
+    
+    // NOTE: Stamina sekarang di-manage di Player + PlayerState (NormalState/SprintingState)
+    // Constants berikut hanya untuk reference/documentation:
+    // - STAMINA_MAX = 100f (di Player)
+    // - Drain rate = 25f/sec (di SprintingState)
+    // - Regen rate = 15f/sec (di NormalState)
 
     // Flashlight / battery
     private static final float BATTERY_MAX = 1f;
     private static final float BATTERY_DRAIN_RATE = 0.08f;
     private float battery = BATTERY_MAX;
-    private boolean flashlightOn = false;
+    // NOTE: flashlightOn state sekarang di Player
 
     // Interaction
     private Interactable currentInteractable = null;
@@ -97,8 +100,14 @@ public class PlayScreen implements Screen {
 
     // Sistem terpisah
     private CameraController cameraController;
-    private LightingSystem lightingSystem;
+    private LightingRenderer lightingRenderer;
     private HudRenderer hudRenderer;
+    private InputHandler inputHandler;
+    
+    // DEBUG MODE - untuk visual hitbox
+    // Set ke true untuk render hitbox visual (RED=body, GREEN=foot)
+    // Non-final agar tidak menjadi dead code warning saat false
+    private static boolean debugHitbox = false;
     private boolean paused = false;
     private com.badlogic.gdx.math.Rectangle resumeButtonBounds = new com.badlogic.gdx.math.Rectangle();
 
@@ -146,8 +155,9 @@ public class PlayScreen implements Screen {
 
         // Sistem eksternal
         cameraController = new CameraController(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-        lightingSystem = new LightingSystem();
+        lightingRenderer = new LightingRenderer();
         hudRenderer = new HudRenderer();
+        inputHandler = new InputHandler();
 
         // --------- LOAD FLOOR TEXTURES ---------
         // Pastikan file-file ini ada di assets/
@@ -181,22 +191,21 @@ public class PlayScreen implements Screen {
         currentRoomId = gm.getCurrentRoomId();
         switchToRoom(currentRoomId);
 
-        // === NEW: spawn Josh (Enemy) - DISABLED FOR NOW ===
-        // float enemyW = 24f;
-        // float enemyH = 36f;
-        // josh = new Enemy(
-        //         player.getX() + 120f,   // sedikit di kanan player
-        //         player.getY() + 60f,    // sedikit di atas player
-        //         enemyW,
-        //         enemyH
-        // );
-        // ==================================================
+        // === NEW: spawn Josh (Enemy) - CONDITIONAL BASED ON TESTING MODE ===
+        if (!gm.isTestingMode()) {
+            float enemyW = 24f;
+            float enemyH = 36f;
+            josh = new Enemy(
+                    player.getX() + 120f,
+                    player.getY() + 60f,
+                    enemyW,
+                    enemyH
+            );
+        }
+        // ====================================================================
 
         // Set kamera awal di player
         cameraController.update(worldCamera, worldViewport, player);
-
-        // Cache this screen instance for resume
-        gm.setPlayScreen(this);
     }
 
     private void switchToRoom(RoomId id) {
@@ -206,11 +215,13 @@ public class PlayScreen implements Screen {
                 rid -> RoomFactory.createRoom(rid, VIRTUAL_WIDTH, VIRTUAL_HEIGHT));
         currentInteractable = null;
 
-        // === NEW: Handle Josh saat room transition - DISABLED FOR NOW ===
-        // if (josh != null && josh.getCurrentStateType() == com.fearjosh.frontend.state.enemy.EnemyStateType.CHASING) {
-        //     // Josh akan despawn dan respawn dekat player nanti
-        // }
-        // ================================================================
+        // === NEW: Handle Josh saat room transition - CONDITIONAL ===
+        if (!GameManager.getInstance().isTestingMode()) {
+            if (josh != null && josh.getCurrentStateType() == com.fearjosh.frontend.state.enemy.EnemyStateType.CHASING) {
+                // Josh akan despawn dan respawn dekat player nanti
+            }
+        }
+        // ============================================================
     }
 
     // ======================
@@ -219,7 +230,8 @@ public class PlayScreen implements Screen {
 
     @Override
     public void render(float delta) {
-        if (!paused) {
+        // STATE CHECK: Hanya update jika PLAYING (tidak paused)
+        if (!paused && GameManager.getInstance().isPlaying()) {
             update(delta);
         }
 
@@ -252,18 +264,20 @@ public class PlayScreen implements Screen {
         // 2) Shapes: lighting, walls, item (masih pakai ShapeRenderer)
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        lightingSystem.render(shapeRenderer, player, flashlightOn, battery / BATTERY_MAX);
+        lightingRenderer.render(shapeRenderer, player, player.isFlashlightOn(), battery / BATTERY_MAX);
         drawWalls();
 
         for (Interactable i : currentRoom.getInteractables())
             if (i.isActive())
                 i.render(shapeRenderer);
 
-        // === NEW: render Josh (sementara kotak merah pakai ShapeRenderer) - DISABLED FOR NOW ===
-                // if (josh != null) {
-                //     josh.render(shapeRenderer);
-                // }
-        // ========================================================================================
+        // === NEW: render Josh (sementara kotak merah pakai ShapeRenderer) - CONDITIONAL ===
+        if (!GameManager.getInstance().isTestingMode()) {
+            if (josh != null) {
+                josh.render(shapeRenderer);
+            }
+        }
+        // ===================================================================================
 
         shapeRenderer.end();
 
@@ -301,10 +315,16 @@ public class PlayScreen implements Screen {
         hudRenderer.render(shapeRenderer,
                 VIRTUAL_WIDTH,
                 VIRTUAL_HEIGHT,
-                stamina,
-                STAMINA_MAX,
+                player.getStamina(),
+                player.getMaxStamina(),
                 battery,
                 BATTERY_MAX);
+        
+        // DEBUG: Render hitboxes jika debugHitbox aktif
+        if (debugHitbox && GameManager.getInstance().isPlaying()) {
+            player.debugRenderHitboxes(shapeRenderer);
+        }
+        
         shapeRenderer.end();
 
         // Draw HUD text (difficulty)
@@ -313,8 +333,8 @@ public class PlayScreen implements Screen {
         hudRenderer.renderText(batch, font, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
         batch.end();
 
-        // Handle pause button click in UI space
-        if (Gdx.input.justTouched()) {
+        // Handle pause button click in UI space - HANYA jika state PLAYING
+        if (GameManager.getInstance().isPlaying() && Gdx.input.justTouched()) {
             float screenX = Gdx.input.getX();
             float screenY = Gdx.input.getY();
             // Convert to UI world coords
@@ -323,6 +343,12 @@ public class PlayScreen implements Screen {
             com.badlogic.gdx.math.Rectangle r = hudRenderer.getPauseButtonBounds();
             if (r.contains(uiCoords.x, uiCoords.y)) {
                 paused = !paused;
+                // Update state
+                if (paused) {
+                    GameManager.getInstance().setCurrentState(GameManager.GameState.PAUSED);
+                } else {
+                    GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
+                }
             }
         }
 
@@ -361,27 +387,33 @@ public class PlayScreen implements Screen {
             font.draw(batch, "Main Menu", menuBtnX + 40f, menuBtnY + 24f);
             batch.end();
 
-            // Keyboard shortcuts to resume
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) ||
-                    Gdx.input.isKeyJustPressed(Input.Keys.SPACE) ||
-                    Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-                paused = false;
+            // Keyboard shortcuts to resume - HANYA jika state PAUSED
+            if (GameManager.getInstance().isPaused()) {
+                if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) ||
+                        Gdx.input.isKeyJustPressed(Input.Keys.SPACE) ||
+                        Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                    paused = false;
+                    GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
+                }
             }
 
-            // Mouse click on Resume or Main Menu
-            if (Gdx.input.justTouched()) {
+            // Mouse click on Resume or Main Menu - HANYA jika state PAUSED
+            if (GameManager.getInstance().isPaused() && Gdx.input.justTouched()) {
                 float sx = Gdx.input.getX();
                 float sy = Gdx.input.getY();
                 com.badlogic.gdx.math.Vector3 ui = uiCamera.unproject(new com.badlogic.gdx.math.Vector3(sx, sy, 0));
+                
                 if (resumeButtonBounds.contains(ui.x, ui.y)) {
                     paused = false;
+                    GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
                 } else {
                     // Test main menu button area
                     float testW = 160f, testH = 36f;
                     float testX = panelX + (panelW - testW) / 2f;
                     float testY = btnY + btnH + 10f;
                     if (ui.x >= testX && ui.x <= testX + testW && ui.y >= testY && ui.y <= testY + testH) {
-                        // Go back to main menu without resetting session
+                        // Go back to main menu - UBAH STATE ke MAIN_MENU
+                        GameManager.getInstance().setCurrentState(GameManager.GameState.MAIN_MENU);
                         com.fearjosh.frontend.FearJosh app = this.game;
                         app.setScreen(new com.fearjosh.frontend.screen.MainMenuScreen(app));
                     }
@@ -412,84 +444,55 @@ public class PlayScreen implements Screen {
         handleInteractInput();
         currentRoom.cleanupInactive();
 
-        // === NEW: update musuh (Josh) dengan collision handling - DISABLED FOR NOW ===
-        // if (josh != null) {
-        //     josh.update(player, currentRoom, delta);
-        //
-        //     // Check apakah Josh menabrak player (GAME OVER)
-        //     if (!josh.isDespawned() && checkEnemyPlayerCollision(josh, player)) {
-        //         // TODO: Trigger game over / death sequence
-        //         System.out.println("GAME OVER: Josh caught you!");
-        //         // Bisa redirect ke game over screen atau death screen
-        //     }
-        //
-        //     // Clamp Josh ke dalam ruangan (wall collision)
-        //     clampEnemyToRoom(josh);
-        // }
-        // ============================================================================
+        // === NEW: update musuh (Josh) dengan collision handling - CONDITIONAL ===
+        if (!GameManager.getInstance().isTestingMode()) {
+            if (josh != null) {
+                josh.update(player, currentRoom, delta);
+
+                // Check apakah Josh menabrak player (GAME OVER)
+                if (!josh.isDespawned() && checkEnemyPlayerCollision(josh, player)) {
+                    // [PLANNED] Trigger game over / death sequence - redirect to GameOverScreen
+                    System.out.println("GAME OVER: Josh caught you!");
+                }
+
+                // Clamp Josh ke dalam ruangan (wall collision)
+                clampEnemyToRoom(josh);
+            }
+        }
+        // ==========================================================================
 
         // Kamera update di akhir logic
         cameraController.update(worldCamera, worldViewport, player);
     }
 
     // ======================
-    // INPUT & MOVEMENT
+    // INPUT & MOVEMENT (via InputHandler + Command Pattern)
     // ======================
 
     private void handleInput(float delta) {
-        float dx = 0f, dy = 0f;
-
-        boolean up = Gdx.input.isKeyPressed(Input.Keys.W);
-        boolean down = Gdx.input.isKeyPressed(Input.Keys.S);
-        boolean left = Gdx.input.isKeyPressed(Input.Keys.A);
-        boolean right = Gdx.input.isKeyPressed(Input.Keys.D);
-
-        if (up)
-            dy += 1;
-        if (down)
-            dy -= 1;
-        if (left)
-            dx -= 1;
-        if (right)
-            dx += 1;
-
-        isMoving = (dx != 0 || dy != 0);
-
-        // Toggle flashlight
-        if (Gdx.input.isKeyJustPressed(Input.Keys.F) && battery > 0)
-            flashlightOn = !flashlightOn;
-
-        // Normalize
+        // 1. Poll input dan execute commands via InputHandler
+        inputHandler.update(player, delta);
+        
+        // 2. Get movement direction dari InputHandler
+        float dx = inputHandler.getMoveDirX();
+        float dy = inputHandler.getMoveDirY();
+        isMoving = inputHandler.isMoving();
+        
+        // 3. Calculate speed berdasarkan Player state (Normal/Sprinting)
+        float baseSpeed = WALK_SPEED;
+        float speed = baseSpeed * player.getSpeedMultiplier() * delta;
+        
+        // 4. Apply movement dengan collision resolution
         if (isMoving) {
-            float len = (float) Math.sqrt(dx * dx + dy * dy);
-            dx /= len;
-            dy /= len;
-        }
-
-        // Sprint
-        boolean shift = Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT)
-                || Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT);
-
-        com.fearjosh.frontend.manager.DifficultyStrategy ds = com.fearjosh.frontend.manager.GameManager.getInstance()
-                .getDifficultyStrategy();
-        float speed = WALK_SPEED * ds.walkSpeedMultiplier();
-        boolean sprinting = false;
-
-        if (shift && stamina > 0 && isMoving) {
-            speed = RUN_SPEED * ds.runSpeedMultiplier();
-            sprinting = true;
-        }
-
-        if (isMoving) {
-            float mx = dx * speed * delta;
-            float my = dy * speed * delta;
+            float mx = dx * speed;
+            float my = dy * speed;
             float oldX = player.getX();
             float oldY = player.getY();
 
-            // First move fully to update facing direction
+            // Move dan update facing direction
             player.move(mx, my);
 
-            // If colliding with furniture, resolve per-axis (slide along edges)
+            // Collision resolution per-axis (slide along edges)
             if (collidesWithFurniture(player)) {
                 // Test X-only
                 player.setX(oldX + mx);
@@ -515,59 +518,52 @@ public class PlayScreen implements Screen {
                 }
             }
         }
-
-        // Stamina
-        if (sprinting)
-            stamina -= STAMINA_DRAIN_RATE * ds.staminaDrainMultiplier() * delta;
-        else if (!isMoving)
-            stamina += STAMINA_REGEN_RATE * delta;
-
-        if (stamina < 0)
-            stamina = 0;
-        if (stamina > STAMINA_MAX)
-            stamina = STAMINA_MAX;
+        
+        // NOTE: Stamina drain/regen sekarang di-handle oleh PlayerState (NormalState/SprintingState)
+        // NOTE: Flashlight toggle sekarang di-handle oleh InputHandler -> Player.toggleFlashlight()
     }
 
     // ======================
     // FURNITURE COLLISIONS
     // ======================
 
+    /**
+     * COLLISION FURNITURE: Pakai FOOT HITBOX player
+     * Player hanya collision dengan kaki, bukan full body
+     */
     private boolean collidesWithFurniture(Player p) {
-        float px = p.getX();
-        float py = p.getY();
-        float pw = p.getWidth();
-        float ph = p.getHeight();
+        // GUNAKAN FOOT HITBOX (bukan body bounds!)
+        com.badlogic.gdx.math.Rectangle footBounds = p.getFootBounds();
 
-        // Check tables
+        // Check tables - full rectangle furniture
         for (Table t : currentRoom.getTables()) {
-            if (overlapsRect(px, py, pw, ph, t.getX(), t.getY(), t.getWidth(), t.getHeight()))
+            if (footBounds.overlaps(t.getCollisionBounds()))
                 return true;
         }
-        // Check lockers (block whether open or closed)
+        // Check lockers - full rectangle furniture
         for (Locker l : currentRoom.getLockers()) {
-            if (overlapsRect(px, py, pw, ph, l.getX(), l.getY(), l.getWidth(), l.getHeight()))
+            if (footBounds.overlaps(l.getCollisionBounds()))
                 return true;
         }
         return false;
-    }
-
-    private boolean overlapsRect(float x, float y, float w, float h,
-                                 float x2, float y2, float w2, float h2) {
-        return x < x2 + w2 &&
-                x + w > x2 &&
-                y < y2 + h2 &&
-                y + h > y2;
     }
 
     // ========================
     // ENEMY COLLISION HELPERS
     // ========================
 
+    /**
+     * COLLISION ENEMY: Pakai BODY HITBOX player (full body)
+     * Enemy menangkap player jika kena bagian mana pun dari body
+     */
     private boolean checkEnemyPlayerCollision(Enemy enemy, Player player) {
-        return overlapsRect(
-                enemy.getX(), enemy.getY(), enemy.getWidth(), enemy.getHeight(),
-                player.getX(), player.getY(), player.getWidth(), player.getHeight()
+        // GUNAKAN BODY HITBOX (full body, bukan foot!)
+        com.badlogic.gdx.math.Rectangle playerBody = player.getBodyBounds();
+        com.badlogic.gdx.math.Rectangle enemyBounds = new com.badlogic.gdx.math.Rectangle(
+            enemy.getX(), enemy.getY(), enemy.getWidth(), enemy.getHeight()
         );
+        
+        return playerBody.overlaps(enemyBounds);
     }
 
     private void clampEnemyToRoom(Enemy enemy) {
@@ -661,13 +657,13 @@ public class PlayScreen implements Screen {
     }
 
     private void updateBattery(float delta) {
-        if (flashlightOn && battery > 0) {
-            com.fearjosh.frontend.manager.DifficultyStrategy ds = com.fearjosh.frontend.manager.GameManager
+        if (player.isFlashlightOn() && battery > 0) {
+            com.fearjosh.frontend.difficulty.DifficultyStrategy ds = com.fearjosh.frontend.core.GameManager
                     .getInstance().getDifficultyStrategy();
             battery -= BATTERY_DRAIN_RATE * ds.batteryDrainMultiplier() * delta;
             if (battery <= 0) {
                 battery = 0;
-                flashlightOn = false;
+                player.setFlashlightOn(false);
             }
         }
     }
@@ -874,7 +870,7 @@ public class PlayScreen implements Screen {
     // ======================
 
     private void renderDarknessLayer() {
-        com.fearjosh.frontend.manager.DifficultyStrategy ds = com.fearjosh.frontend.manager.GameManager.getInstance()
+        com.fearjosh.frontend.difficulty.DifficultyStrategy ds = com.fearjosh.frontend.core.GameManager.getInstance()
                 .getDifficultyStrategy();
         float visionRadius = ds.visionRadius();
         float fogDarkness = ds.fogDarkness();
@@ -913,7 +909,7 @@ public class PlayScreen implements Screen {
         batch.draw(lightTexture, cx - baseSize / 2f, cy - baseSize / 2f, baseSize, baseSize);
 
         // Flashlight cone - adds extended vision when active
-        if (flashlightOn && battery > 0f) {
+        if (player.isFlashlightOn() && battery > 0f) {
             float batteryFrac = battery / BATTERY_MAX;
 
             // Flashlight parameters based on battery
@@ -1009,6 +1005,15 @@ public class PlayScreen implements Screen {
 
     @Override
     public void show() {
+        // CRITICAL: Disable UI menu input - set InputProcessor to null
+        // Ini mencegah tombol menu (termasuk Quit) diklik saat game berjalan
+        com.badlogic.gdx.Gdx.input.setInputProcessor(null);
+        
+        // SET STATE ke PLAYING saat screen ditampilkan
+        // (Kecuali jika dari Main Menu yang sudah set PLAYING)
+        if (!GameManager.getInstance().isPaused()) {
+            GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
+        }
     }
 
     @Override

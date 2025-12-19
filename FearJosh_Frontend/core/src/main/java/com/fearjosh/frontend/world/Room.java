@@ -1,5 +1,8 @@
 package com.fearjosh.frontend.world;
 
+import com.fearjosh.frontend.world.objects.Table;
+import com.fearjosh.frontend.world.objects.Locker;
+
 import java.util.List;
 
 public class Room {

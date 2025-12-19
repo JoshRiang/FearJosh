@@ -2,8 +2,11 @@ package com.fearjosh.frontend.factory;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.fearjosh.frontend.world.*;
-import com.fearjosh.frontend.manager.GameManager;
-import com.fearjosh.frontend.manager.DifficultyStrategy;
+import com.fearjosh.frontend.world.objects.Table;
+import com.fearjosh.frontend.world.objects.Locker;
+import com.fearjosh.frontend.world.items.Battery;
+import com.fearjosh.frontend.core.GameManager;
+import com.fearjosh.frontend.difficulty.DifficultyStrategy;
 
 import java.util.ArrayList;
 import java.util.List;

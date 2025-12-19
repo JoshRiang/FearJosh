@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.CheckBox;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
@@ -18,8 +19,8 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.fearjosh.frontend.FearJosh;
-import com.fearjosh.frontend.manager.GameManager;
-import com.fearjosh.frontend.manager.GameDifficulty;
+import com.fearjosh.frontend.core.GameManager;
+import com.fearjosh.frontend.difficulty.GameDifficulty;
 
 /**
  * Simple main menu screen with Play, Settings, and Quit.
@@ -41,6 +42,7 @@ public class MainMenuScreen implements Screen {
     private Texture buttonTexOver;
     private Texture buttonTexDown;
     private Texture cardTex;
+    private boolean isActive = true;
 
     public MainMenuScreen(FearJosh game) {
         this.game = game;
@@ -81,6 +83,19 @@ public class MainMenuScreen implements Screen {
         ls.font = font;
         ls.fontColor = Color.WHITE;
         skin.add("default", ls);
+        
+        CheckBox.CheckBoxStyle checkStyle = new CheckBox.CheckBoxStyle();
+        checkStyle.font = font;
+        checkStyle.fontColor = Color.WHITE;
+        Pixmap checkboxPixmap = new Pixmap(24, 24, Pixmap.Format.RGBA8888);
+        checkboxPixmap.setColor(Color.DARK_GRAY);
+        checkboxPixmap.fillRectangle(0, 0, 24, 24);
+        checkStyle.checkboxOff = new com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable(new Texture(checkboxPixmap));
+        checkboxPixmap.setColor(Color.GREEN);
+        checkboxPixmap.fillRectangle(4, 4, 16, 16);
+        checkStyle.checkboxOn = new com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable(new Texture(checkboxPixmap));
+        checkboxPixmap.dispose();
+        skin.add("default", checkStyle);
 
         buildUI();
     }
@@ -133,12 +148,32 @@ public class MainMenuScreen implements Screen {
         card.add(quitBtn).width(btnWidth).height(btnHeight).padBottom(18f).row();
 
         root.add(card).width(600f).height(360f);
+        
+        CheckBox testingCheckbox = new CheckBox(" Testing", skin);
+        testingCheckbox.setChecked(GameManager.getInstance().isTestingMode());
+        testingCheckbox.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                GameManager.getInstance().setTestingMode(testingCheckbox.isChecked());
+            }
+        });
+        
+        Table bottomRightTable = new Table();
+        bottomRightTable.setFillParent(true);
+        bottomRightTable.bottom().right();
+        bottomRightTable.add(testingCheckbox).pad(20f);
+        stage.addActor(bottomRightTable);
 
         playBtn.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                // Start a brand new game
+                // STATE CHECK: hanya proses jika state == MAIN_MENU
+                if (!GameManager.getInstance().isInMenu()) return;
+                if (!isActive) return;
+                isActive = false;
+                
                 GameManager.getInstance().resetNewGame(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+                GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
                 game.setScreen(new PlayScreen(game));
             }
         });
@@ -147,13 +182,14 @@ public class MainMenuScreen implements Screen {
             resumeBtn.addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
-                    // Resume current session using cached screen if available
+                    // STATE CHECK: hanya proses jika state == MAIN_MENU
+                    if (!GameManager.getInstance().isInMenu()) return;
+                    if (!isActive) return;
+                    isActive = false;
+                    
                     GameManager gm = GameManager.getInstance();
-                    if (gm.getPlayScreen() != null) {
-                        game.setScreen(gm.getPlayScreen());
-                    } else {
-                        game.setScreen(new PlayScreen(game));
-                    }
+                    gm.setCurrentState(GameManager.GameState.PLAYING);
+                    game.setScreen(new PlayScreen(game));
                 }
             });
         }
@@ -161,6 +197,12 @@ public class MainMenuScreen implements Screen {
         settingsBtn.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
+                // STATE CHECK: hanya proses jika state == MAIN_MENU
+                if (!GameManager.getInstance().isInMenu()) return;
+                if (!isActive) return;
+                isActive = false;
+                
+                // Settings tidak ubah state (tetap MAIN_MENU)
                 game.setScreen(new SettingsScreen(game));
             }
         });
@@ -168,6 +210,9 @@ public class MainMenuScreen implements Screen {
         quitBtn.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
+                // STATE CHECK: hanya proses jika state == MAIN_MENU
+                if (!GameManager.getInstance().isInMenu()) return;
+                if (!isActive) return;
                 Gdx.app.exit();
             }
         });
@@ -233,10 +278,18 @@ public class MainMenuScreen implements Screen {
 
     @Override
     public void show() {
+        isActive = true;
+        // SET STATE ke MAIN_MENU saat screen ditampilkan
+        GameManager.getInstance().setCurrentState(GameManager.GameState.MAIN_MENU);
+        Gdx.input.setInputProcessor(stage);
     }
 
     @Override
     public void render(float delta) {
+        // DOUBLE CHECK: hanya render jika state == MAIN_MENU
+        if (!GameManager.getInstance().isInMenu()) return;
+        if (!isActive) return;
+        
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
