@@ -15,8 +15,11 @@ public class Player {
 
     private float x;
     private float y;
-    private float width;
-    private float height;
+    
+    // RENDER SIZE - Visual only (untuk draw sprite)
+    private float renderWidth;
+    private float renderHeight;
+    
     private Direction direction;
     
     // DUAL HITBOX SYSTEM
@@ -24,8 +27,6 @@ public class Player {
     private Rectangle bodyBounds;
     
     // 2) FOOT HITBOX - untuk collision dengan FURNITURE (hanya kaki)
-    private static final float FOOT_WIDTH_RATIO = 0.5f;   // 50% dari lebar sprite
-    private static final float FOOT_HEIGHT_RATIO = 0.25f; // 25% dari tinggi sprite
     private Rectangle footBounds;
 
     // Animations
@@ -48,8 +49,9 @@ public class Player {
     public Player(float x, float y, float width, float height) {
         this.x = x;
         this.y = y;
-        this.width = width;
-        this.height = height;
+        // Use Constants for proper sizing (width/height params ignored)
+        this.renderWidth = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_WIDTH;
+        this.renderHeight = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_HEIGHT;
         this.direction = Direction.DOWN;
         this.bodyBounds = new Rectangle();
         this.footBounds = new Rectangle();
@@ -176,11 +178,11 @@ public class Player {
     // ------------ posisi ------------
 
     public float getCenterX() {
-        return x + width / 2f;
+        return x + renderWidth / 2f;
     }
 
     public float getCenterY() {
-        return y + height / 2f;
+        return y + renderHeight / 2f;
     }
 
     public Direction getDirection() {
@@ -205,30 +207,46 @@ public class Player {
         return y;
     }
 
+    /** @return Render width for drawing sprite */
+    public float getRenderWidth() {
+        return renderWidth;
+    }
+    
+    /** @return Render height for drawing sprite */
+    public float getRenderHeight() {
+        return renderHeight;
+    }
+    
+    /** @deprecated Use getRenderWidth() - kept for compatibility */
     public float getWidth() {
-        return width;
+        return renderWidth;  // Return render width instead
     }
 
+    /** @deprecated Use getRenderHeight() - kept for compatibility */
     public float getHeight() {
-        return height;
+        return renderHeight;  // Return render height instead
     }
     
     // ------------ DUAL HITBOX SYSTEM ------------
     
     /**
      * Update posisi SEMUA hitbox setiap kali player bergerak
+     * Uses Constants for consistent, tunable hitbox sizing
      */
     private void updateHitboxes() {
         // 1) BODY HITBOX - full sprite untuk enemy collision
-        bodyBounds.set(x, y, width, height);
+        float bodyW = com.fearjosh.frontend.config.Constants.PLAYER_ENEMY_HITBOX_WIDTH;
+        float bodyH = com.fearjosh.frontend.config.Constants.PLAYER_ENEMY_HITBOX_HEIGHT;
+        bodyBounds.set(x, y, bodyW, bodyH);
         
         // 2) FOOT HITBOX - bagian bawah untuk furniture collision
-        float footWidth = width * FOOT_WIDTH_RATIO;
-        float footHeight = height * FOOT_HEIGHT_RATIO;
-        float footX = x + (width - footWidth) / 2f;  // Center horizontally
-        float footY = y;  // Bottom of sprite
+        float footW = com.fearjosh.frontend.config.Constants.PLAYER_COLLISION_WIDTH;
+        float footH = com.fearjosh.frontend.config.Constants.PLAYER_COLLISION_HEIGHT;
+        float footOffsetY = com.fearjosh.frontend.config.Constants.PLAYER_COLLISION_OFFSET_Y;
+        float footX = x + (renderWidth - footW) / 2f;  // Center horizontally
+        float footY = y + footOffsetY;  // Bottom of sprite + offset
         
-        footBounds.set(footX, footY, footWidth, footHeight);
+        footBounds.set(footX, footY, footW, footH);
     }
     
     /**

@@ -33,16 +33,47 @@ public final class Constants {
     /** Minimum margin from wall for furniture placement */
     public static final float WALL_MARGIN = 40f;
     
+    /** Clearance width around door (adds margin on both sides) */
+    public static final float DOOR_CLEARANCE_WIDTH = DOOR_WIDTH + 2 * 30f; // 80 + 60 = 140px
+    
+    /** Clearance depth into room from door (prevents furniture blocking entry) */
+    public static final float DOOR_CLEARANCE_DEPTH = 120f; // Locker height (80) + margin (40)
+    
     /** Offset when player enters new room */
     public static final float ENTRY_OFFSET = 20f;
     
     // ==================== PLAYER ====================
     
-    /** Default player width */
-    public static final float PLAYER_WIDTH = 64f;
+    // --- RENDER SIZE (Visual only - can be adjusted for appearance) ---
+    /** Player render width (visual) - adjust this to make player thinner/wider */
+    public static final float PLAYER_RENDER_WIDTH = 38f;  // Slim proportions
     
-    /** Default player height */
-    public static final float PLAYER_HEIGHT = 64f;
+    /** Player render height (visual) - adjust this for taller/shorter appearance */
+    public static final float PLAYER_RENDER_HEIGHT = 64f;  // Proportional to width
+    
+    // --- COLLISION HITBOX (Foot collision with furniture) ---
+    /** Player collision width (foot hitbox) - affects furniture collision */
+    public static final float PLAYER_COLLISION_WIDTH = 25f;  // ~66% of render width
+    
+    /** Player collision height (foot hitbox) - affects furniture collision */
+    public static final float PLAYER_COLLISION_HEIGHT = 16f;  // 25% of render height
+    
+    /** Y-offset for foot hitbox from player bottom */
+    public static final float PLAYER_COLLISION_OFFSET_Y = 0f;  // At bottom
+    
+    // --- ENEMY HITBOX (Full body collision with enemy) ---
+    /** Player enemy hitbox width (full body) - affects enemy collision */
+    public static final float PLAYER_ENEMY_HITBOX_WIDTH = 38f;  // Match render width
+    
+    /** Player enemy hitbox height (full body) - affects enemy collision */
+    public static final float PLAYER_ENEMY_HITBOX_HEIGHT = 64f;  // Match render height
+    
+    // --- LEGACY (for backward compatibility) ---
+    /** @deprecated Use PLAYER_RENDER_WIDTH instead */
+    public static final float PLAYER_WIDTH = PLAYER_RENDER_WIDTH;
+    
+    /** @deprecated Use PLAYER_RENDER_HEIGHT instead */
+    public static final float PLAYER_HEIGHT = PLAYER_RENDER_HEIGHT;
     
     /** Normal walking speed */
     public static final float PLAYER_WALK_SPEED = 120f;

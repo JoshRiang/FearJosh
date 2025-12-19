@@ -1,6 +1,7 @@
 package com.fearjosh.frontend.factory;
 
 import com.badlogic.gdx.math.MathUtils;
+import com.fearjosh.frontend.config.Constants;
 import com.fearjosh.frontend.world.*;
 import com.fearjosh.frontend.world.objects.Table;
 import com.fearjosh.frontend.world.objects.Locker;
@@ -18,9 +19,6 @@ public class RoomFactory {
     private static final float LOCKER_HEIGHT = 80f;
     private static final float TABLE_WIDTH = 75f;
     private static final float TABLE_HEIGHT = 45f;
-
-    private static final float DOOR_WIDTH = 80f;
-    private static final float DOOR_THICKNESS = 20f;
 
     public static Room createRoom(RoomId id, float worldWidth, float worldHeight) {
         List<Table> tables = new ArrayList<>();
@@ -110,24 +108,45 @@ public class RoomFactory {
         float centerX = worldWidth / 2f;
         float centerY = worldHeight / 2f;
 
-        float doorMinX = centerX - DOOR_WIDTH / 2f;
-        float doorMinY = centerY - DOOR_WIDTH / 2f;
+        // Clearance zone dimensions (wider and deeper than just the door opening)
+        float clearanceWidth = Constants.DOOR_CLEARANCE_WIDTH;   // 140px (DOOR_WIDTH + margins)
+        float clearanceDepth = Constants.DOOR_CLEARANCE_DEPTH;   // 120px (furniture height + margin)
 
-        // top door
+        // top door - clearance extends DOWN into room
         if (id.hasUp()) {
-            zones.add(new float[] { doorMinX, worldHeight - DOOR_THICKNESS, DOOR_WIDTH, DOOR_THICKNESS });
+            zones.add(new float[] { 
+                centerX - clearanceWidth / 2f,      // x: centered, expanded width
+                worldHeight - clearanceDepth,       // y: starts DEPTH pixels from top
+                clearanceWidth,                     // width: expanded
+                clearanceDepth                      // height: extends into room
+            });
         }
-        // bottom door
+        // bottom door - clearance extends UP into room
         if (id.hasDown()) {
-            zones.add(new float[] { doorMinX, 0f, DOOR_WIDTH, DOOR_THICKNESS });
+            zones.add(new float[] { 
+                centerX - clearanceWidth / 2f,      // x: centered, expanded width
+                0f,                                 // y: starts at bottom edge
+                clearanceWidth,                     // width: expanded
+                clearanceDepth                      // height: extends into room
+            });
         }
-        // left door
+        // left door - clearance extends RIGHT into room
         if (id.hasLeft()) {
-            zones.add(new float[] { 0f, doorMinY, DOOR_THICKNESS, DOOR_WIDTH });
+            zones.add(new float[] { 
+                0f,                                 // x: starts at left edge
+                centerY - clearanceWidth / 2f,      // y: centered, expanded width
+                clearanceDepth,                     // width: extends into room
+                clearanceWidth                      // height: expanded
+            });
         }
-        // right door
+        // right door - clearance extends LEFT into room
         if (id.hasRight()) {
-            zones.add(new float[] { worldWidth - DOOR_THICKNESS, doorMinY, DOOR_THICKNESS, DOOR_WIDTH });
+            zones.add(new float[] { 
+                worldWidth - clearanceDepth,        // x: starts DEPTH pixels from right
+                centerY - clearanceWidth / 2f,      // y: centered, expanded width
+                clearanceDepth,                     // width: extends into room
+                clearanceWidth                      // height: expanded
+            });
         }
 
         return zones;

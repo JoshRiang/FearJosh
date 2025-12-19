@@ -12,7 +12,7 @@ public class MediumDifficulty implements DifficultyStrategy {
 
     @Override
     public float runSpeedMultiplier() {
-        return 1.0f;
+        return 1.4f;  // Sprint gives 40% speed boost - CUSTOM: ubah angka ini (1.0-2.0)
     }
 
     @Override

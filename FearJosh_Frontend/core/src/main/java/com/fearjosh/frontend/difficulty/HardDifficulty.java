@@ -16,7 +16,7 @@ public class HardDifficulty implements DifficultyStrategy {
 
     @Override
     public float runSpeedMultiplier() {
-        return 0.95f;
+        return 1.33f;  // Sprint gives 40% speed boost - CUSTOM: ubah angka ini (0.95-2.0)
     }
 
     @Override

@@ -83,14 +83,14 @@ public class RoomTransitionSystem {
         float doorMaxY = virtualHeight / 2f + doorWidth / 2f;
         
         // UP
-        if (player.getY() + player.getHeight() >= virtualHeight - wallThickness) {
+        if (player.getY() + player.getRenderHeight() >= virtualHeight - wallThickness) {
             RoomId up = currentRoomId.up();
             if (up != null && cx >= doorMinX && cx <= doorMaxX) {
                 transitionCooldown = TRANSITION_COOLDOWN_DURATION;
                 float newY = wallThickness + entryOffset;
                 return new TransitionResult(up, player.getX(), newY);
             } else {
-                player.setY(virtualHeight - player.getHeight() - wallThickness);
+                player.setY(virtualHeight - player.getRenderHeight() - wallThickness);
             }
         }
         
@@ -99,7 +99,7 @@ public class RoomTransitionSystem {
             RoomId down = currentRoomId.down();
             if (down != null && cx >= doorMinX && cx <= doorMaxX) {
                 transitionCooldown = TRANSITION_COOLDOWN_DURATION;
-                float newY = virtualHeight - wallThickness - player.getHeight() - entryOffset;
+                float newY = virtualHeight - wallThickness - player.getRenderHeight() - entryOffset;
                 return new TransitionResult(down, player.getX(), newY);
             } else {
                 player.setY(wallThickness);
@@ -107,14 +107,14 @@ public class RoomTransitionSystem {
         }
         
         // RIGHT
-        if (player.getX() + player.getWidth() >= virtualWidth - wallThickness) {
+        if (player.getX() + player.getRenderWidth() >= virtualWidth - wallThickness) {
             RoomId right = currentRoomId.right();
             if (right != null && cy >= doorMinY && cy <= doorMaxY) {
                 transitionCooldown = TRANSITION_COOLDOWN_DURATION;
                 float newX = wallThickness + entryOffset;
                 return new TransitionResult(right, newX, player.getY());
             } else {
-                player.setX(virtualWidth - player.getWidth() - wallThickness);
+                player.setX(virtualWidth - player.getRenderWidth() - wallThickness);
             }
         }
         
@@ -123,7 +123,7 @@ public class RoomTransitionSystem {
             RoomId left = currentRoomId.left();
             if (left != null && cy >= doorMinY && cy <= doorMaxY) {
                 transitionCooldown = TRANSITION_COOLDOWN_DURATION;
-                float newX = virtualWidth - wallThickness - player.getWidth() - entryOffset;
+                float newX = virtualWidth - wallThickness - player.getRenderWidth() - entryOffset;
                 return new TransitionResult(left, newX, player.getY());
             } else {
                 player.setX(wallThickness);
@@ -146,10 +146,10 @@ public class RoomTransitionSystem {
         float cy = player.getCenterY();
         
         // Clamp each direction
-        if (player.getY() + player.getHeight() > virtualHeight - wallThickness) {
+        if (player.getY() + player.getRenderHeight() > virtualHeight - wallThickness) {
             RoomId up = currentRoomId.up();
             if (up == null || cx < doorMinX || cx > doorMaxX) {
-                player.setY(virtualHeight - player.getHeight() - wallThickness);
+                player.setY(virtualHeight - player.getRenderHeight() - wallThickness);
             }
         }
         if (player.getY() < wallThickness) {
@@ -158,10 +158,10 @@ public class RoomTransitionSystem {
                 player.setY(wallThickness);
             }
         }
-        if (player.getX() + player.getWidth() > virtualWidth - wallThickness) {
+        if (player.getX() + player.getRenderWidth() > virtualWidth - wallThickness) {
             RoomId right = currentRoomId.right();
             if (right == null || cy < doorMinY || cy > doorMaxY) {
-                player.setX(virtualWidth - player.getWidth() - wallThickness);
+                player.setX(virtualWidth - player.getRenderWidth() - wallThickness);
             }
         }
         if (player.getX() < wallThickness) {

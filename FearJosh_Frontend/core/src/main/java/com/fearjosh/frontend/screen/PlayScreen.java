@@ -285,13 +285,13 @@ public class PlayScreen implements Screen {
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
 
-        // player
+        // player - use render size (separate from hitbox)
         TextureRegion frame = player.getCurrentFrame(isMoving);
         batch.draw(frame,
                 player.getX(),
                 player.getY(),
-                player.getWidth(),
-                player.getHeight());
+                player.getRenderWidth(),
+                player.getRenderHeight());
 
         // prompt E
         if (currentInteractable != null && currentInteractable.isActive()) {
@@ -412,10 +412,13 @@ public class PlayScreen implements Screen {
                     float testX = panelX + (panelW - testW) / 2f;
                     float testY = btnY + btnH + 10f;
                     if (ui.x >= testX && ui.x <= testX + testW && ui.y >= testY && ui.y <= testY + testH) {
-                        // Go back to main menu - UBAH STATE ke MAIN_MENU
-                        GameManager.getInstance().setCurrentState(GameManager.GameState.MAIN_MENU);
+                        // Go back to main menu - SAVE PROGRESS first, then return to menu
+                        GameManager gm = GameManager.getInstance();
+                        gm.saveProgressToSession();  // CRITICAL: Save before leaving
+                        gm.setCurrentState(GameManager.GameState.MAIN_MENU);
                         com.fearjosh.frontend.FearJosh app = this.game;
                         app.setScreen(new com.fearjosh.frontend.screen.MainMenuScreen(app));
+                        System.out.println("[PlayScreen] Pause -> Main Menu: Progress saved, session remains active");
                     }
                 }
             }
@@ -600,7 +603,7 @@ public class PlayScreen implements Screen {
         boolean moved = false;
 
         // ATAS
-        if (player.getY() + player.getHeight() >= VIRTUAL_HEIGHT - WALL_THICKNESS) {
+        if (player.getY() + player.getRenderHeight() >= VIRTUAL_HEIGHT - WALL_THICKNESS) {
             RoomId up = currentRoomId.up();
             if (up != null && cx >= doorMinX && cx <= doorMaxX) {
                 switchToRoom(up);
@@ -608,7 +611,7 @@ public class PlayScreen implements Screen {
                 player.setY(newY);
                 moved = true;
             } else {
-                player.setY(VIRTUAL_HEIGHT - player.getHeight() - WALL_THICKNESS);
+                player.setY(VIRTUAL_HEIGHT - player.getRenderHeight() - WALL_THICKNESS);
             }
         }
 
@@ -617,7 +620,7 @@ public class PlayScreen implements Screen {
             RoomId down = currentRoomId.down();
             if (down != null && cx >= doorMinX && cx <= doorMaxX) {
                 switchToRoom(down);
-                float newY = VIRTUAL_HEIGHT - WALL_THICKNESS - player.getHeight() - ENTRY_OFFSET;
+                float newY = VIRTUAL_HEIGHT - WALL_THICKNESS - player.getRenderHeight() - ENTRY_OFFSET;
                 player.setY(newY);
                 moved = true;
             } else {
@@ -626,7 +629,7 @@ public class PlayScreen implements Screen {
         }
 
         // KANAN
-        if (!moved && player.getX() + player.getWidth() >= VIRTUAL_WIDTH - WALL_THICKNESS) {
+        if (!moved && player.getX() + player.getRenderWidth() >= VIRTUAL_WIDTH - WALL_THICKNESS) {
             RoomId right = currentRoomId.right();
             if (right != null && cy >= doorMinY && cy <= doorMaxY) {
                 switchToRoom(right);
@@ -634,7 +637,7 @@ public class PlayScreen implements Screen {
                 player.setX(newX);
                 moved = true;
             } else {
-                player.setX(VIRTUAL_WIDTH - player.getWidth() - WALL_THICKNESS);
+                player.setX(VIRTUAL_WIDTH - player.getRenderWidth() - WALL_THICKNESS);
             }
         }
 
@@ -643,7 +646,7 @@ public class PlayScreen implements Screen {
             RoomId left = currentRoomId.left();
             if (left != null && cy >= doorMinY && cy <= doorMaxY) {
                 switchToRoom(left);
-                float newX = VIRTUAL_WIDTH - WALL_THICKNESS - player.getWidth() - ENTRY_OFFSET;
+                float newX = VIRTUAL_WIDTH - WALL_THICKNESS - player.getRenderWidth() - ENTRY_OFFSET;
                 player.setX(newX);
                 moved = true;
             } else {

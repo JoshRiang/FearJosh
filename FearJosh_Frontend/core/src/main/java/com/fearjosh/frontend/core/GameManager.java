@@ -26,6 +26,10 @@ public class GameManager {
 
     private static GameManager INSTANCE;
 
+    // SESSION MANAGEMENT - NEW SYSTEM
+    private GameSession currentSession;     // Active game session (null = no run)
+    
+    // Legacy fields (kept for backward compatibility during transition)
     private Player player;
     private RoomId currentRoomId;
 
@@ -54,8 +58,9 @@ public class GameManager {
         this.virtualWidth = virtualWidth;
         this.virtualHeight = virtualHeight;
         if (player == null) {
-            float pw = 64f;
-            float ph = 64f;
+            // Use Constants for consistent sizing
+            float pw = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_WIDTH;
+            float ph = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_HEIGHT;
             player = new Player(virtualWidth / 2f - pw / 2f,
                     virtualHeight / 2f - ph / 2f,
                     pw, ph);
@@ -66,16 +71,79 @@ public class GameManager {
         }
     }
 
+    /**
+     * Check if there's an active game session that can be resumed
+     * @return true if currentSession exists and is active
+     */
     public boolean hasActiveSession() {
-        return player != null && currentRoomId != null;
+        return currentSession != null && currentSession.isActive();
     }
-
-    public void resetNewGame(float virtualWidth, float virtualHeight) {
+    
+    /**
+     * Get current active session (may be null)
+     */
+    public GameSession getCurrentSession() {
+        return currentSession;
+    }
+    
+    /**
+     * Start a NEW GAME - creates fresh session and resets all progress
+     * This should be called when user clicks "New Game"
+     */
+    public void startNewGame(float virtualWidth, float virtualHeight) {
         this.virtualWidth = virtualWidth;
         this.virtualHeight = virtualHeight;
+        
+        // Reset player
         this.player = null;
         this.currentRoomId = null;
         initIfNeeded(virtualWidth, virtualHeight);
+        
+        // Create new session with current difficulty
+        RoomId startRoom = RoomId.R5;  // Starting room
+        currentSession = new GameSession(
+            difficulty,
+            startRoom,
+            player.getX(),
+            player.getY()
+        );
+        
+        System.out.println("[GameManager] NEW GAME started: " + currentSession);
+    }
+    
+    /**
+     * RESUME existing session - restores progress without reset
+     * This should be called when user clicks "Resume" from menu
+     */
+    public void resumeSession() {
+        if (!hasActiveSession()) {
+            System.err.println("[GameManager] ERROR: No active session to resume!");
+            return;
+        }
+        
+        // Restore player state from session
+        currentSession.restoreToPlayer(player);
+        currentRoomId = currentSession.getCurrentRoomId();
+        
+        System.out.println("[GameManager] RESUMED session: " + currentSession);
+    }
+    
+    /**
+     * Save current progress to session
+     * Call this when pausing or changing rooms
+     */
+    public void saveProgressToSession() {
+        if (currentSession != null && currentSession.isActive()) {
+            currentSession.updateFromPlayer(player, currentRoomId);
+        }
+    }
+    
+    /**
+     * @deprecated Use startNewGame() instead
+     */
+    @Deprecated
+    public void resetNewGame(float virtualWidth, float virtualHeight) {
+        startNewGame(virtualWidth, virtualHeight);
     }
 
     public GameDifficulty getDifficulty() {
@@ -86,6 +154,11 @@ public class GameManager {
         return difficultyStrategy;
     }
 
+    /**
+     * Change difficulty setting.
+     * NOTE: If active session exists, this will NOT take effect until New Game.
+     * Use canChangeDifficulty() and requiresNewGame() to check before calling.
+     */
     public void setDifficulty(GameDifficulty diff) {
         this.difficulty = diff;
         switch (diff) {
@@ -99,6 +172,32 @@ public class GameManager {
                 this.difficultyStrategy = new HardDifficulty();
                 break;
         }
+    }
+    
+    /**
+     * Check if difficulty can be changed freely
+     * @return false if active session exists (difficulty is locked)
+     */
+    public boolean canChangeDifficultyFreely() {
+        return !hasActiveSession();
+    }
+    
+    /**
+     * Check if changing difficulty requires starting a new game
+     * @return true if active session exists
+     */
+    public boolean difficultyChangeRequiresNewGame() {
+        return hasActiveSession();
+    }
+    
+    /**
+     * Force difficulty change AND start new game
+     * Use this after user confirms difficulty change popup
+     */
+    public void changeDifficultyAndStartNewGame(GameDifficulty newDiff, float virtualWidth, float virtualHeight) {
+        setDifficulty(newDiff);
+        startNewGame(virtualWidth, virtualHeight);
+        System.out.println("[GameManager] Difficulty changed to " + newDiff + " with NEW GAME");
     }
 
     public Player getPlayer() {

@@ -4,13 +4,12 @@ floor_tiles_2.png
 floor_tiles_2G.png
 floor_tiles_3.png
 floor_tiles_3G.png
-jonatan.png
 jonatan_down.png
-jonatan_downGG.png
 jonatan_left.png
 jonatan_right.png
 jonatan_up.png
 josh.png
+joshInvertedFace.png
 josh_proto_searching.png
 lebron.png
 libgdx.png

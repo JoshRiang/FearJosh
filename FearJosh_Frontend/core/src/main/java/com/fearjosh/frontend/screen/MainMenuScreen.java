@@ -172,9 +172,11 @@ public class MainMenuScreen implements Screen {
                 if (!isActive) return;
                 isActive = false;
                 
-                GameManager.getInstance().resetNewGame(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+                // NEW GAME - creates fresh session
+                GameManager.getInstance().startNewGame(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
                 GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
                 game.setScreen(new PlayScreen(game));
+                System.out.println("[MainMenu] NEW GAME clicked - fresh session started");
             }
         });
 
@@ -187,9 +189,12 @@ public class MainMenuScreen implements Screen {
                     if (!isActive) return;
                     isActive = false;
                     
+                    // RESUME - restore existing session WITHOUT reset
                     GameManager gm = GameManager.getInstance();
+                    gm.resumeSession();  // Restore progress
                     gm.setCurrentState(GameManager.GameState.PLAYING);
                     game.setScreen(new PlayScreen(game));
+                    System.out.println("[MainMenu] RESUME clicked - continuing existing session");
                 }
             });
         }
