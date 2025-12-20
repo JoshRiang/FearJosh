@@ -86,7 +86,10 @@ public class CutsceneScreen implements Screen {
             }
         }
 
-        // Start music if available
+        // Stop any background music that is currently playing
+        AudioManager.getInstance().stopMusic();
+
+        // Start cutscene music if available
         if (cutsceneData.hasMusic()) {
             AudioManager.getInstance().playMusic(cutsceneData.getMusicPath(), true);
         }
