@@ -31,6 +31,7 @@ import com.fearjosh.frontend.input.InputHandler;
 import com.fearjosh.frontend.systems.Inventory;
 import com.fearjosh.frontend.entity.Item;
 import com.fearjosh.frontend.entity.BatteryItem;
+import com.fearjosh.frontend.systems.AudioManager;
 import com.fearjosh.frontend.systems.Inventory;
 import com.fearjosh.frontend.entity.Item;
 
@@ -1321,6 +1322,9 @@ public class PlayScreen implements Screen {
         // CRITICAL: Disable UI menu input - set InputProcessor to null
         // Ini mencegah tombol menu (termasuk Quit) diklik saat game berjalan
         com.badlogic.gdx.Gdx.input.setInputProcessor(null);
+
+        // Stop menu music when entering gameplay
+        AudioManager.getInstance().stopMusic();
 
         // SET STATE ke PLAYING saat screen ditampilkan
         // (Kecuali jika dari Main Menu yang sudah set PLAYING)

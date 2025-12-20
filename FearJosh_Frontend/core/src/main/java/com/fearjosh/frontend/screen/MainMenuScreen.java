@@ -20,7 +20,9 @@ import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.fearjosh.frontend.FearJosh;
 import com.fearjosh.frontend.core.GameManager;
+import com.fearjosh.frontend.cutscene.CutsceneManager;
 import com.fearjosh.frontend.difficulty.GameDifficulty;
+import com.fearjosh.frontend.systems.AudioManager;
 
 /**
  * Simple main menu screen with Play, Settings, and Quit.
@@ -42,6 +44,8 @@ public class MainMenuScreen implements Screen {
     private Texture buttonTexOver;
     private Texture buttonTexDown;
     private Texture cardTex;
+    private Texture backgroundTex;
+    private com.badlogic.gdx.graphics.g2d.SpriteBatch batch;
     private boolean isActive = true;
 
     public MainMenuScreen(FearJosh game) {
@@ -54,16 +58,27 @@ public class MainMenuScreen implements Screen {
 
         font = new BitmapFont();
         font.setColor(Color.WHITE);
+        font.getData().setScale(1.2f); // Slightly larger text
 
-        // Create rounded textures for a more polished look (inspired by Apple HIG)
-        buttonTex = createRoundedTexture(320, 56, 14,
-                new Color(0.2f, 0.2f, 0.23f, 1f));
-        buttonTexOver = createRoundedTexture(320, 56, 14,
-                new Color(0.24f, 0.24f, 0.27f, 1f));
-        buttonTexDown = createRoundedTexture(320, 56, 14,
-                new Color(0.16f, 0.16f, 0.19f, 1f));
-        cardTex = createRoundedTexture(600, 360, 18,
-                new Color(0.08f, 0.08f, 0.1f, 0.85f));
+        // Load background image
+        batch = new com.badlogic.gdx.graphics.g2d.SpriteBatch();
+        try {
+            backgroundTex = new Texture("UI/main_menu_background.jpg");
+        } catch (Exception e) {
+            System.err.println("[MainMenu] Background image not found, using black background");
+            backgroundTex = null;
+        }
+
+        // Create button textures with red borders (horror theme)
+        buttonTex = createRoundedTextureWithBorder(320, 56, 14,
+                new Color(0.15f, 0.15f, 0.18f, 0.95f), // Dark gray background
+                new Color(0.8f, 0.1f, 0.1f, 1f), 2); // Red border
+        buttonTexOver = createRoundedTextureWithBorder(320, 56, 14,
+                new Color(0.2f, 0.2f, 0.23f, 0.95f), // Lighter on hover
+                new Color(1f, 0.2f, 0.2f, 1f), 3); // Brighter red border
+        buttonTexDown = createRoundedTextureWithBorder(320, 56, 14,
+                new Color(0.1f, 0.1f, 0.13f, 0.95f), // Darker when pressed
+                new Color(0.6f, 0.05f, 0.05f, 1f), 2); // Dark red border
 
         skin = new Skin();
         skin.add("default-font", font);
@@ -107,26 +122,23 @@ public class MainMenuScreen implements Screen {
         root.setFillParent(true);
         stage.addActor(root);
 
-        // Background subtle dark overlay
-        root.center();
+        // Center layout - no card background (transparent, background image shows
+        // through)
+        root.center().padTop(120f); // Move buttons down
 
-        // Card container to reflect Apple HIG cleanliness
-        Table card = new Table();
-        card.defaults().pad(6f);
-        card.setBackground(new NinePatchDrawable(new com.badlogic.gdx.graphics.g2d.NinePatch(cardTex, 18, 18, 18, 18)));
+        Table menuTable = new Table();
+        menuTable.defaults().pad(6f);
+        // No background - let the background image show through
 
-        Label title = new Label("FearJosh", skin);
-        title.setColor(new Color(1f, 1f, 1f, 1f));
-
-        Label subtitle = new Label("A stealth-horror experience", skin);
-        subtitle.setColor(new Color(0.85f, 0.85f, 0.9f, 1f));
+        // Title and subtitle are part of the background image, so we skip them
+        // Or you can add them if you want text overlay
 
         // Difficulty status label
         GameDifficulty diff = GameManager.getInstance().getDifficulty();
         String diffText = "Difficulty: " + diff.name().substring(0, 1).toUpperCase()
                 + diff.name().substring(1).toLowerCase();
         Label difficultyLabel = new Label(diffText, skin);
-        difficultyLabel.setColor(new Color(0.8f, 0.8f, 0.85f, 1f));
+        difficultyLabel.setColor(new Color(0.9f, 0.9f, 0.95f, 1f));
 
         // Determine session state
         boolean hasSession = GameManager.getInstance().hasActiveSession();
@@ -139,17 +151,16 @@ public class MainMenuScreen implements Screen {
         float btnWidth = 360f;
         float btnHeight = 60f;
 
-        card.add(title).padTop(24f).padBottom(8f).row();
-        card.add(subtitle).padBottom(8f).row();
-        card.add(difficultyLabel).padBottom(24f).row();
-        card.add(playBtn).width(btnWidth).height(btnHeight).pad(8f).row();
+        // Add elements with spacing
+        menuTable.add(playBtn).width(btnWidth).height(btnHeight).pad(8f).row();
         if (resumeBtn != null) {
-            card.add(resumeBtn).width(btnWidth).height(btnHeight).pad(8f).row();
+            menuTable.add(resumeBtn).width(btnWidth).height(btnHeight).pad(8f).row();
         }
-        card.add(settingsBtn).width(btnWidth).height(btnHeight).pad(8f).row();
-        card.add(quitBtn).width(btnWidth).height(btnHeight).pad(8f).padBottom(24f).row();
+        menuTable.add(settingsBtn).width(btnWidth).height(btnHeight).pad(8f).row();
+        menuTable.add(quitBtn).width(btnWidth).height(btnHeight).pad(8f).row();
+        menuTable.add(difficultyLabel).padTop(24f).row();
 
-        root.add(card).width(680f).height(hasSession ? 500f : 450f);
+        root.add(menuTable);
 
         CheckBox testingCheckbox = new CheckBox(" Testing", skin);
         testingCheckbox.setChecked(GameManager.getInstance().isTestingMode());
@@ -179,8 +190,12 @@ public class MainMenuScreen implements Screen {
                 // NEW GAME - creates fresh session
                 GameManager.getInstance().startNewGame(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
                 GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
-                game.setScreen(new PlayScreen(game));
-                System.out.println("[MainMenu] NEW GAME clicked - fresh session started");
+
+                // Play tutorial cutscene before starting game
+                Screen playScreen = new PlayScreen(game);
+                CutsceneManager.getInstance().playCutscene(game, "tutorial", playScreen);
+
+                System.out.println("[MainMenu] NEW GAME clicked - playing cutscene then starting game");
             }
         });
 
@@ -291,12 +306,54 @@ public class MainMenuScreen implements Screen {
         pm.fillCircle(cx, cy, r);
     }
 
+    /**
+     * Create rounded texture with colored border (horror theme)
+     */
+    private Texture createRoundedTextureWithBorder(int w, int h, int radius, Color bgColor, Color borderColor,
+            int borderWidth) {
+        Pixmap pm = new Pixmap(w, h, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+        pm.setColor(0, 0, 0, 0);
+        pm.fill();
+
+        // Draw border first (slightly larger radius)
+        pm.setColor(borderColor);
+        pm.fillRectangle(radius, 0, w - radius * 2, h);
+        pm.fillRectangle(0, radius, w, h - radius * 2);
+        for (int i = 0; i < 4; i++) {
+            int cx = (i % 2 == 0) ? radius : w - radius;
+            int cy = (i < 2) ? radius : h - radius;
+            fillCircle(pm, cx, cy, radius, borderColor);
+        }
+
+        // Draw background on top (smaller to show border)
+        int innerRadius = radius - borderWidth;
+        pm.setColor(bgColor);
+        pm.fillRectangle(radius, borderWidth, w - radius * 2, h - borderWidth * 2);
+        pm.fillRectangle(borderWidth, radius, w - borderWidth * 2, h - radius * 2);
+        for (int i = 0; i < 4; i++) {
+            int cx = (i % 2 == 0) ? radius : w - radius;
+            int cy = (i < 2) ? radius : h - radius;
+            fillCircle(pm, cx, cy, innerRadius, bgColor);
+        }
+
+        Texture t = new Texture(pm);
+        pm.dispose();
+        return t;
+    }
+
     @Override
     public void show() {
         isActive = true;
         // SET STATE ke MAIN_MENU saat screen ditampilkan
         GameManager.getInstance().setCurrentState(GameManager.GameState.MAIN_MENU);
         Gdx.input.setInputProcessor(stage);
+
+        // Play main menu music (looping)
+        AudioManager.getInstance().playMusic("Audio/Music/main_menu_music.wav", true);
+
+        // Play background ambient sound (fire and glitch effects)
+        AudioManager.getInstance().playMusic("Audio/background_menu.wav", true);
     }
 
     @Override
@@ -309,6 +366,14 @@ public class MainMenuScreen implements Screen {
 
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        // Draw background image if available
+        if (backgroundTex != null) {
+            batch.setProjectionMatrix(uiCamera.combined);
+            batch.begin();
+            batch.draw(backgroundTex, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+            batch.end();
+        }
 
         stage.act(delta);
         stage.draw();
@@ -345,6 +410,14 @@ public class MainMenuScreen implements Screen {
         buttonTex.dispose();
         buttonTexOver.dispose();
         buttonTexDown.dispose();
-        cardTex.dispose();
+        if (cardTex != null) {
+            cardTex.dispose();
+        }
+        if (backgroundTex != null) {
+            backgroundTex.dispose();
+        }
+        if (batch != null) {
+            batch.dispose();
+        }
     }
 }

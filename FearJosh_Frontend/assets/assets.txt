@@ -1,3 +1,6 @@
+Audio/Music/main_menu_music.wav
+Audio/background_menu.wav
+Cutscene/0/erasebg-transformed.png
 General/vignette.png
 General/white.png
 Items/battery.png
@@ -19,6 +22,7 @@ Sprite/Player/jonatan_left.png
 Sprite/Player/jonatan_right.png
 Sprite/Player/jonatan_up.png
 UI/HUD/heart.png
+UI/main_menu_background.jpg
 josh.png
 joshInvertedFace.png
 libgdx.png

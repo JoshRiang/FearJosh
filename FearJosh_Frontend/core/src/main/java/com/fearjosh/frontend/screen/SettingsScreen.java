@@ -23,6 +23,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.ButtonGroup;
 import com.fearjosh.frontend.FearJosh;
 import com.fearjosh.frontend.difficulty.GameDifficulty;
 import com.fearjosh.frontend.core.GameManager;
+import com.fearjosh.frontend.systems.AudioManager;
 
 /**
  * Minimal placeholder Settings screen with a Back button.
@@ -146,16 +147,16 @@ public class SettingsScreen implements Screen {
     /**
      * Attempt to change difficulty - shows confirmation popup if active run exists
      */
-    private void attemptChangeDifficulty(GameDifficulty newDiff, FearJosh app, 
-                                        TextButton easy, TextButton medium, TextButton hard) {
+    private void attemptChangeDifficulty(GameDifficulty newDiff, FearJosh app,
+            TextButton easy, TextButton medium, TextButton hard) {
         GameManager gm = GameManager.getInstance();
-        
+
         // If difficulty is same, just apply visual change
         if (gm.getDifficulty() == newDiff) {
             setCheckedForDifficulty(newDiff, easy, medium, hard);
             return;
         }
-        
+
         // Check if there's an active run
         if (gm.difficultyChangeRequiresNewGame()) {
             // Show confirmation popup
@@ -168,71 +169,69 @@ public class SettingsScreen implements Screen {
             System.out.println("[Settings] Difficulty changed to " + newDiff + " (no active run)");
         }
     }
-    
+
     /**
      * Show modal confirmation dialog for difficulty change during active run
      */
     private void showDifficultyChangeConfirmation(final GameDifficulty newDiff, final FearJosh app,
-                                                  final TextButton easy, final TextButton medium, final TextButton hard) {
+            final TextButton easy, final TextButton medium, final TextButton hard) {
         // Create modal overlay
         final Table overlay = new Table();
         overlay.setFillParent(true);
         overlay.setBackground(new NinePatchDrawable(new NinePatch(
-            createRoundedTexture(1, 1, 0, new Color(0f, 0f, 0f, 0.7f)), 0, 0, 0, 0
-        )));
-        
+                createRoundedTexture(1, 1, 0, new Color(0f, 0f, 0f, 0.7f)), 0, 0, 0, 0)));
+
         // Create dialog card
         Table dialog = new Table();
         NinePatchDrawable dialogBg = createRoundedCardDrawable(new Color(0.18f, 0.18f, 0.20f, 0.98f), 16);
         dialog.setBackground(dialogBg);
         dialog.pad(28f);
-        
+
         Label title = new Label("Warning", skin);
-        title.setColor(new Color(1f, 0.4f, 0.3f, 1f));  // Orange-red warning color
+        title.setColor(new Color(1f, 0.4f, 0.3f, 1f)); // Orange-red warning color
         title.setFontScale(1.3f);
-        
+
         Label message = new Label(
-            "Changing difficulty will start a\nNEW GAME and delete your\ncurrent progress.\n\nContinue?",
-            skin
-        );
+                "Changing difficulty will start a\nNEW GAME and delete your\ncurrent progress.\n\nContinue?",
+                skin);
         message.setColor(Color.WHITE);
         message.setAlignment(Align.center);
         message.setFontScale(0.9f);
-        
+
         TextButton confirmBtn = new TextButton("New Game", createPillButtonStyle());
         TextButton cancelBtn = new TextButton("Cancel", createPillButtonStyle());
-        
+
         dialog.add(title).padBottom(16f).row();
         dialog.add(message).padBottom(24f).row();
-        
+
         Table buttons = new Table();
         buttons.add(cancelBtn).width(140f).height(44f).pad(6f);
         buttons.add(confirmBtn).width(140f).height(44f).pad(6f);
         dialog.add(buttons).row();
-        
+
         overlay.add(dialog).width(480f).height(280f);
-        
+
         // Add overlay to stage (modal)
         stage.addActor(overlay);
-        overlay.toFront();  // Ensure it's on top
-        
+        overlay.toFront(); // Ensure it's on top
+
         // Cancel button - dismiss popup, revert selection
         cancelBtn.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                overlay.remove();  // Dismiss popup
+                overlay.remove(); // Dismiss popup
                 // Revert to current difficulty
                 GameDifficulty current = GameManager.getInstance().getDifficulty();
                 setCheckedForDifficulty(current, easy, medium, hard);
                 System.out.println("[Settings] Difficulty change CANCELLED");
             }
         });
-        
+
         // Confirm button - change difficulty AND start new game
         confirmBtn.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                overlay.remove();  // Dismiss popup
+                overlay.remove(); // Dismiss popup
                 // Change difficulty and start new game
                 GameManager gm = GameManager.getInstance();
                 gm.changeDifficultyAndStartNewGame(newDiff, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
@@ -242,13 +241,18 @@ public class SettingsScreen implements Screen {
             }
         });
     }
-    
-    private TextButton getButtonForDifficulty(GameDifficulty diff, TextButton easy, TextButton medium, TextButton hard) {
+
+    private TextButton getButtonForDifficulty(GameDifficulty diff, TextButton easy, TextButton medium,
+            TextButton hard) {
         switch (diff) {
-            case EASY: return easy;
-            case MEDIUM: return medium;
-            case HARD: return hard;
-            default: return medium;
+            case EASY:
+                return easy;
+            case MEDIUM:
+                return medium;
+            case HARD:
+                return hard;
+            default:
+                return medium;
         }
     }
 
@@ -340,6 +344,8 @@ public class SettingsScreen implements Screen {
 
     @Override
     public void show() {
+        // Play main menu music (same as main menu)
+        AudioManager.getInstance().playMusic("Audio/Music/main_menu_music.wav", true);
     }
 
     @Override
