@@ -26,6 +26,7 @@ import com.fearjosh.frontend.world.*;
 import com.fearjosh.frontend.world.objects.Table;
 import com.fearjosh.frontend.world.objects.Locker;
 import com.fearjosh.frontend.core.GameManager;
+import com.fearjosh.frontend.core.RoomDirector;
 import com.fearjosh.frontend.input.InputHandler;
 
 import java.util.EnumMap;
@@ -104,10 +105,12 @@ public class PlayScreen implements Screen {
     private HudRenderer hudRenderer;
     private InputHandler inputHandler;
     
-    // DEBUG MODE - untuk visual hitbox
+    // DEBUG MODE - untuk visual hitbox dan AI debug
     // Set ke true untuk render hitbox visual (RED=body, GREEN=foot)
+    // Set debugEnemy ke true untuk render hearing/vision circles + pathfinding
     // Non-final agar tidak menjadi dead code warning saat false
     private static boolean debugHitbox = false;
+    private static boolean debugEnemy = false; // AI stalker debug visualization
     private boolean paused = false;
     private com.badlogic.gdx.math.Rectangle resumeButtonBounds = new com.badlogic.gdx.math.Rectangle();
 
@@ -191,18 +194,15 @@ public class PlayScreen implements Screen {
         currentRoomId = gm.getCurrentRoomId();
         switchToRoom(currentRoomId);
 
-        // === NEW: spawn Josh (Enemy) - CONDITIONAL BASED ON TESTING MODE ===
+        // === NEW ENEMY SYSTEM: RoomDirector-based spawning ===
+        // Enemy spawn is now handled by RoomDirector (abstract/physical mode)
+        // Old direct spawn removed - see RoomDirector for stalking behavior
+        // Enemy will be created lazily when RoomDirector signals physical presence
         if (!gm.isTestingMode()) {
-            float enemyW = 24f;
-            float enemyH = 36f;
-            josh = new Enemy(
-                    player.getX() + 120f,
-                    player.getY() + 60f,
-                    enemyW,
-                    enemyH
-            );
+            // Enemy entity will be created on-demand via spawnEnemyPhysically()
+            josh = null; // Start with no physical enemy
         }
-        // ====================================================================
+        // ====================================================
 
         // Set kamera awal di player
         cameraController.update(worldCamera, worldViewport, player);
@@ -210,18 +210,26 @@ public class PlayScreen implements Screen {
 
     private void switchToRoom(RoomId id) {
         currentRoomId = id;
-        GameManager.getInstance().setCurrentRoomId(id);
+        GameManager gm = GameManager.getInstance();
+        gm.setCurrentRoomId(id);
         currentRoom = rooms.computeIfAbsent(id,
                 rid -> RoomFactory.createRoom(rid, VIRTUAL_WIDTH, VIRTUAL_HEIGHT));
         currentInteractable = null;
 
-        // === NEW: Handle Josh saat room transition - CONDITIONAL ===
-        if (!GameManager.getInstance().isTestingMode()) {
-            if (josh != null && josh.getCurrentStateType() == com.fearjosh.frontend.state.enemy.EnemyStateType.CHASING) {
-                // Josh akan despawn dan respawn dekat player nanti
+        // === NOTIFY ROOMDIRECTOR: Player changed room ===
+        if (!gm.isTestingMode()) {
+            gm.notifyPlayerRoomChange(id);
+            
+            // Remove physical enemy when changing rooms (becomes abstract)
+            if (josh != null) {
+                RoomDirector rd = gm.getRoomDirector();
+                if (rd != null) {
+                    rd.onEnemyDespawn();
+                }
+                josh = null; // Will respawn via RoomDirector if needed
             }
         }
-        // ============================================================
+        // ===============================================
     }
 
     // ======================
@@ -261,27 +269,37 @@ public class PlayScreen implements Screen {
 
         batch.end();
 
-        // 2) Shapes: lighting, walls, item (masih pakai ShapeRenderer)
+        // 2) Shapes: lighting, walls, enemy, item (masih pakai ShapeRenderer)
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
         lightingRenderer.render(shapeRenderer, player, player.isFlashlightOn(), battery / BATTERY_MAX);
         drawWalls();
 
+        // === RENDER ENEMY (JOSH) - KOTAK BERWARNA ===
+        // Enemy HARUS di-render di world layer SEBELUM fog-of-war
+        // Warna = indikator state (YELLOW=searching, RED=chasing, CYAN=stunned)
+        if (!GameManager.getInstance().isTestingMode()) {
+            if (josh != null && !josh.isDespawned()) {
+                josh.render(shapeRenderer); // <-- RENDER ENEMY DI SINI
+                
+                // DEBUG: Enhanced visualization (hearing/vision circles + pathfinding)
+                if (debugEnemy) {
+                    josh.renderDebugEnhanced(shapeRenderer);
+                }
+                
+                // DEBUG: Verify enemy render (optional - can be removed later)
+                // System.out.println("[DEBUG] Enemy rendered at (" + josh.getX() + ", " + josh.getY() + "), state=" + josh.getCurrentStateType());
+            }
+        }
+        // ============================================
+
         for (Interactable i : currentRoom.getInteractables())
             if (i.isActive())
                 i.render(shapeRenderer);
 
-        // === NEW: render Josh (sementara kotak merah pakai ShapeRenderer) - CONDITIONAL ===
-        if (!GameManager.getInstance().isTestingMode()) {
-            if (josh != null) {
-                josh.render(shapeRenderer);
-            }
-        }
-        // ===================================================================================
-
         shapeRenderer.end();
 
-        // 3) Texture: player + prompt 'E'
+        // 3) Texture: player + prompt 'E' (NO ENEMY HERE - enemy rendered in ShapeRenderer pass)
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
 
@@ -447,25 +465,65 @@ public class PlayScreen implements Screen {
         handleInteractInput();
         currentRoom.cleanupInactive();
 
-        // === NEW: update musuh (Josh) dengan collision handling - CONDITIONAL ===
+        // === ROOM DIRECTOR SYSTEM: Abstract/Physical enemy control ===
         if (!GameManager.getInstance().isTestingMode()) {
-            if (josh != null) {
-                josh.update(player, currentRoom, delta);
-
-                // Check apakah Josh menabrak player (GAME OVER)
-                if (!josh.isDespawned() && checkEnemyPlayerCollision(josh, player)) {
-                    // [PLANNED] Trigger game over / death sequence - redirect to GameOverScreen
-                    System.out.println("GAME OVER: Josh caught you!");
-                }
-
-                // Clamp Josh ke dalam ruangan (wall collision)
-                clampEnemyToRoom(josh);
-            }
+            updateRoomDirector(delta);
         }
-        // ==========================================================================
+        // ==============================================================
 
         // Kamera update di akhir logic
         cameraController.update(worldCamera, worldViewport, player);
+    }
+    
+    /**
+     * Update RoomDirector and handle enemy spawning
+     */
+    private void updateRoomDirector(float delta) {
+        GameManager gm = GameManager.getInstance();
+        RoomDirector rd = gm.getRoomDirector();
+        
+        if (rd == null) return;
+        
+        // Update RoomDirector logic (abstract mode movement, grace period, etc.)
+        rd.update(delta);
+        
+        // Check if enemy should spawn physically
+        if (rd.isEnemyPhysicallyPresent() && josh == null) {
+            // Spawn enemy at door position
+            spawnEnemyPhysically(rd);
+        }
+        
+        // Update physical enemy if present
+        if (josh != null && !josh.isDespawned()) {
+            josh.update(player, currentRoom, delta);
+
+            // Check collision with player (GAME OVER)
+            if (checkEnemyPlayerCollision(josh, player)) {
+                System.out.println("[GAME OVER] Josh caught you!");
+                // [TODO] Trigger game over / death sequence
+            }
+
+            // Clamp to room bounds
+            clampEnemyToRoom(josh);
+        }
+    }
+    
+    /**
+     * Spawn enemy physically at door based on RoomDirector
+     */
+    private void spawnEnemyPhysically(RoomDirector rd) {
+        float enemyW = 24f;
+        float enemyH = 36f;
+        
+        // Get spawn position from RoomDirector (at door)
+        float[] pos = rd.getEnemySpawnPosition(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, enemyW, enemyH);
+        
+        josh = new Enemy(pos[0], pos[1], enemyW, enemyH);
+        
+        System.out.println("[PlayScreen] ✅ Enemy spawned physically via " + 
+            rd.getEntryDirection() + " door at (" + pos[0] + ", " + pos[1] + ")");
+        System.out.println("[PlayScreen] Enemy size: " + enemyW + "x" + enemyH + 
+            ", state: " + josh.getCurrentStateType());
     }
 
     // ======================

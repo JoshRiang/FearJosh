@@ -29,6 +29,9 @@ public class GameManager {
     // SESSION MANAGEMENT - NEW SYSTEM
     private GameSession currentSession;     // Active game session (null = no run)
     
+    // ROOM DIRECTOR - Enemy stalking system
+    private RoomDirector roomDirector;      // Controls enemy abstract/physical presence
+    
     // Legacy fields (kept for backward compatibility during transition)
     private Player player;
     private RoomId currentRoomId;
@@ -107,6 +110,11 @@ public class GameManager {
             player.getX(),
             player.getY()
         );
+        
+        // Initialize RoomDirector for new game
+        if (!testingMode) {
+            initializeRoomDirector(startRoom);
+        }
         
         System.out.println("[GameManager] NEW GAME started: " + currentSession);
     }
@@ -255,5 +263,60 @@ public class GameManager {
     
     public boolean isPaused() {
         return currentState == GameState.PAUSED;
+    }
+    
+    // ------------ ROOM DIRECTOR SYSTEM ------------
+    
+    /**
+     * Initialize RoomDirector with enemy starting in different room
+     */
+    private void initializeRoomDirector(RoomId playerStartRoom) {
+        // Enemy starts 2-3 rooms away for fair gameplay
+        RoomId enemyStartRoom = getRandomDistantRoom(playerStartRoom);
+        roomDirector = new RoomDirector(playerStartRoom, enemyStartRoom);
+        roomDirector.setDebugMode(com.fearjosh.frontend.config.Constants.DEBUG_ROOM_DIRECTOR);
+        
+        System.out.println("[GameManager] RoomDirector initialized: enemy starts in " + enemyStartRoom);
+    }
+    
+    /**
+     * Get RoomDirector instance
+     */
+    public RoomDirector getRoomDirector() {
+        return roomDirector;
+    }
+    
+    /**
+     * Notify RoomDirector when player changes room
+     */
+    public void notifyPlayerRoomChange(RoomId newRoom) {
+        if (roomDirector != null) {
+            roomDirector.onPlayerEnterRoom(newRoom);
+        }
+    }
+    
+    /**
+     * Get a random room that's 2-3 moves away from start
+     */
+    private RoomId getRandomDistantRoom(RoomId start) {
+        // Corners are good distant starting points
+        RoomId[] distantRooms = {RoomId.R1, RoomId.R3, RoomId.R7, RoomId.R9};
+        
+        // Filter out the player's starting room
+        java.util.List<RoomId> validRooms = new java.util.ArrayList<>();
+        for (RoomId room : distantRooms) {
+            if (room != start) {
+                validRooms.add(room);
+            }
+        }
+        
+        if (validRooms.isEmpty()) {
+            // Fallback to R1 if player starts in all corners (impossible but safe)
+            return RoomId.R1;
+        }
+        
+        // Return random distant room
+        int randomIndex = (int)(Math.random() * validRooms.size());
+        return validRooms.get(randomIndex);
     }
 }

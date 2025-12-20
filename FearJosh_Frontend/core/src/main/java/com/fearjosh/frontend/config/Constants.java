@@ -143,4 +143,7 @@ public final class Constants {
     
     /** Enable/disable collision debug rendering */
     public static final boolean DEBUG_COLLISION = false;
+    
+    /** Enable/disable RoomDirector debug logging */
+    public static final boolean DEBUG_ROOM_DIRECTOR = false;
 }

@@ -8,6 +8,9 @@ import com.fearjosh.frontend.world.Room;
 import com.fearjosh.frontend.world.RoomId;
 import com.fearjosh.frontend.world.objects.Table;
 import com.fearjosh.frontend.world.objects.Locker;
+import com.fearjosh.frontend.systems.PathfindingSystem;
+import java.util.List;
+import java.util.ArrayList;
 
 public class Enemy {
 
@@ -25,21 +28,35 @@ public class Enemy {
     private final EnemyState chasingState;
     private final EnemyStunnedState stunnedState;
 
-    // Despawn/Respawn mechanics
+    // Despawn/Respawn mechanics - DEPRECATED in favor of RoomDirector system
+    // Old system: Enemy despawned after losing sight, respawned near player
+    // New system: RoomDirector handles abstract/physical presence via room adjacency
     private float lastSeenX, lastSeenY;
-    private RoomId lastSeenRoomId; // track room terakhir kali Josh terlihat
+    private RoomId lastSeenRoomId;
     private float despawnTimer = 0f;
-    private static final float DESPAWN_DELAY = 3f;
+    private static final float DESPAWN_DELAY = 999999f; // Effectively disabled
     private boolean isDespawned = false;
     private float respawnCheckTimer = 0f;
-    private static final float RESPAWN_CHECK_INTERVAL = 2f;
+    private static final float RESPAWN_CHECK_INTERVAL = 999999f; // Effectively disabled
     
-    // [PLANNED] Min distance from player when respawning - will be used in respawn logic
+    // [DEPRECATED] Old respawn distance - now handled by RoomDirector door spawning
     public static final float RESPAWN_DISTANCE = 200f;
 
     // Detection radii untuk debug visual
     public static final float DETECTION_RADIUS = 220f;  // hearing range (hijau)
     public static final float VISION_RADIUS = 350f;     // vision range (biru)
+    
+    // ==================== PATHFINDING ====================
+    
+    private List<float[]> currentPath = new ArrayList<>();
+    private int currentWaypointIndex = 0;
+    private float pathRecalculateTimer = 0f;
+    private static final float PATH_RECALCULATE_INTERVAL = 0.5f; // Recalculate every 0.5s
+    private static final float WAYPOINT_REACH_DISTANCE = 12f; // Distance to consider waypoint reached
+    
+    // Current pathfinding target
+    private float pathTargetX = 0f;
+    private float pathTargetY = 0f;
 
     public Enemy(float x, float y, float width, float height) {
         this.x = x;
@@ -72,16 +89,13 @@ public class Enemy {
             lastSeenRoomId = room.getId();
         }
 
-        // Jika sudah despawned, cek apakah perlu respawn
+        // OLD RESPAWN SYSTEM DISABLED - Now handled by RoomDirector
+        // Despawn/respawn logic replaced with abstract/physical presence in RoomDirector
+        // Enemy spawning is controlled by RoomDirector.isEnemyPhysicallyPresent()
+        
         if (isDespawned) {
-            respawnCheckTimer += delta;
-            if (respawnCheckTimer >= RESPAWN_CHECK_INTERVAL) {
-                respawnCheckTimer = 0f;
-                // Respawn hanya jika player masuk ruangan yang adjacent dengan last seen
-                if (isAdjacentRoom(room.getId(), lastSeenRoomId)) {
-                    respawnNearPlayer(player);
-                }
-            }
+            // Enemy is despawned, no update needed
+            // RoomDirector will handle re-spawning via door entry
             return;
         }
 
@@ -96,49 +110,59 @@ public class Enemy {
             lastSeenY = y;
             lastSeenRoomId = room.getId();
             despawnTimer = 0f;
-        } else if (currentStateType == EnemyStateType.SEARCHING) {
-            despawnTimer += delta;
-            if (despawnTimer >= DESPAWN_DELAY) {
-                despawn();
-            }
         }
+        // OLD DESPAWN TIMER DISABLED
+        // Despawning now handled by room transitions in RoomDirector
     }
 
-    // Check apakah currentRoom adjacent dengan lastSeenRoom
+    // [DEPRECATED] Old adjacency check - now in RoomDirector.moveCloser()
+    @Deprecated
     private boolean isAdjacentRoom(RoomId currentRoom, RoomId lastSeen) {
-        if (currentRoom == lastSeen) return true; // same room
-        
-        // Check 4 adjacent directions
+        if (currentRoom == lastSeen) return true;
         return currentRoom == lastSeen.up() ||
                currentRoom == lastSeen.down() ||
                currentRoom == lastSeen.left() ||
                currentRoom == lastSeen.right();
     }
 
+    // [DEPRECATED] Old despawn - now controlled by RoomDirector
+    @Deprecated
     private void despawn() {
         isDespawned = true;
         despawnTimer = 0f;
         respawnCheckTimer = 0f;
     }
 
+    // [DEPRECATED] Old respawn logic - replaced by RoomDirector door spawning
+    @Deprecated
     private void respawnNearPlayer(Player player) {
-        // Spawn di sekitar player dengan offset random
-        float offsetDist = 100f;
-        double angle = Math.random() * 2 * Math.PI;
-        float offsetX = (float)(Math.cos(angle) * offsetDist);
-        float offsetY = (float)(Math.sin(angle) * offsetDist);
-
-        x = player.getCenterX() + offsetX - width / 2f;
-        y = player.getCenterY() + offsetY - height / 2f;
-        
-        isDespawned = false;
-        changeState(searchingState);
+        // OLD SYSTEM: Random offset spawn near player
+        // NEW SYSTEM: RoomDirector spawns at door position
+        // This method is no longer called
     }
 
-    // Render dengan visual debug indicators
+    /**
+     * MAIN RENDER - Gambar enemy sebagai KOTAK BERWARNA
+     * WARNA = INDIKATOR STATE (jangan dihapus, ini untuk debug)
+     */
     public void render(ShapeRenderer renderer) {
-        if (isDespawned) return;
+        // Draw Josh dengan warna berdasarkan state
+        Color stateColor = getStateColor();
+        renderer.setColor(stateColor);
+        renderer.rect(x, y, width, height);
         
+        // Optional: outline putih untuk visibility
+        renderer.setColor(Color.WHITE);
+        renderer.rectLine(x, y, x + width, y, 2f);
+        renderer.rectLine(x + width, y, x + width, y + height, 2f);
+        renderer.rectLine(x + width, y + height, x, y + height, 2f);
+        renderer.rectLine(x, y + height, x, y, 2f);
+    }
+
+    /**
+     * DEBUG RENDER - Detection circles + hitbox
+     */
+    public void renderDebug(ShapeRenderer renderer) {
         // Draw detection circles (hijau = hearing, biru = vision)
         renderer.setColor(0f, 1f, 0f, 0.3f); // hijau semi-transparent
         renderer.circle(getCenterX(), getCenterY(), DETECTION_RADIUS);
@@ -146,9 +170,9 @@ public class Enemy {
         renderer.setColor(0f, 0f, 1f, 0.2f); // biru semi-transparent
         renderer.circle(getCenterX(), getCenterY(), VISION_RADIUS);
 
-        // Draw Josh dengan warna berdasarkan state
+        // Draw main hitbox
         Color stateColor = getStateColor();
-        renderer.setColor(stateColor);
+        renderer.setColor(stateColor.r, stateColor.g, stateColor.b, 0.5f);
         renderer.rect(x, y, width, height);
     }
 
@@ -159,7 +183,7 @@ public class Enemy {
             case CHASING:
                 return Color.RED;    // merah
             case STUNNED:
-                return Color.WHITE;  // putih
+                return Color.CYAN;   // cyan (lebih jelas dari putih)
             default:
                 return Color.RED;
         }
@@ -167,34 +191,55 @@ public class Enemy {
 
     public void render(SpriteBatch batch) {
         // [PLANNED] Render Josh sprite texture here when assets are ready
-        // Currently using ShapeRenderer in PlayScreen for placeholder rendering
+        // For now, use render(ShapeRenderer) instead
     }
 
-    // Movement dengan collision detection
+    // Movement dengan collision detection - SMOOTH DIAGONAL MOVEMENT
     public void move(float dx, float dy, Room room) {
-        float newX = x + dx;
-        float newY = y + dy;
-
         float oldX = x;
         float oldY = y;
-        x = newX;
-        y = newY;
-
+        
+        // Try full diagonal movement first
+        x = oldX + dx;
+        y = oldY + dy;
+        
         if (collidesWithFurniture(room)) {
+            // Full diagonal blocked, try sliding along obstacles
+            
+            // Try X-only movement (slide horizontally)
             x = oldX + dx;
             y = oldY;
-            if (collidesWithFurniture(room)) {
-                x = oldX;
-            } else {
-                oldX = x;
-            }
-
+            boolean xBlocked = collidesWithFurniture(room);
+            
+            // Try Y-only movement (slide vertically)
             x = oldX;
             y = oldY + dy;
-            if (collidesWithFurniture(room)) {
+            boolean yBlocked = collidesWithFurniture(room);
+            
+            // Apply best available movement
+            if (!xBlocked && !yBlocked) {
+                // Both axes free, prefer original direction
+                // Use the axis with larger delta for sliding
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    x = oldX + dx; // Slide horizontally
+                    y = oldY;
+                } else {
+                    x = oldX; // Slide vertically
+                    y = oldY + dy;
+                }
+            } else if (!xBlocked) {
+                x = oldX + dx; // Only X is free
+                y = oldY;
+            } else if (!yBlocked) {
+                x = oldX; // Only Y is free
+                y = oldY + dy;
+            } else {
+                // Both blocked, stay in place
+                x = oldX;
                 y = oldY;
             }
         }
+        // If no collision, position already set to (oldX+dx, oldY+dy)
     }
 
     private boolean collidesWithFurniture(Room room) {
@@ -246,4 +291,154 @@ public class Enemy {
     public RoomId getLastSeenRoomId() { return lastSeenRoomId; }
 
     public boolean isDespawned() { return isDespawned; }
+    
+    // ==================== PATHFINDING METHODS ====================
+    
+    /**
+     * Calculate path to target using A* pathfinding
+     * @param targetX Target X coordinate
+     * @param targetY Target Y coordinate
+     * @param room Current room
+     * @param worldWidth World width
+     * @param worldHeight World height
+     */
+    public void calculatePathTo(float targetX, float targetY, Room room, float worldWidth, float worldHeight) {
+        pathTargetX = targetX;
+        pathTargetY = targetY;
+        
+        List<float[]> rawPath = PathfindingSystem.findPath(
+            getCenterX(), getCenterY(),
+            targetX, targetY,
+            room, worldWidth, worldHeight
+        );
+        
+        // Simplify path to reduce waypoints
+        currentPath = PathfindingSystem.simplifyPath(rawPath);
+        currentWaypointIndex = 0;
+        pathRecalculateTimer = 0f;
+        
+        if (com.fearjosh.frontend.config.Constants.DEBUG_ROOM_DIRECTOR) {
+            System.out.println("[Enemy] Path calculated: " + currentPath.size() + " waypoints");
+        }
+    }
+    
+    /**
+     * Move along current path towards target
+     * Call this from update loop when in chasing state
+     * @param delta Delta time
+     * @param room Current room
+     * @param worldWidth World width
+     * @param worldHeight World height
+     * @return true if moving along path, false if path exhausted
+     */
+    public boolean followPath(float delta, Room room, float worldWidth, float worldHeight) {
+        // No path
+        if (currentPath.isEmpty()) {
+            return false;
+        }
+        
+        // Recalculate path periodically
+        pathRecalculateTimer += delta;
+        if (pathRecalculateTimer >= PATH_RECALCULATE_INTERVAL) {
+            calculatePathTo(pathTargetX, pathTargetY, room, worldWidth, worldHeight);
+        }
+        
+        // Get current waypoint
+        if (currentWaypointIndex >= currentPath.size()) {
+            return false; // Path exhausted
+        }
+        
+        float[] waypoint = currentPath.get(currentWaypointIndex);
+        float waypointX = waypoint[0];
+        float waypointY = waypoint[1];
+        
+        // Calculate direction to waypoint (SMOOTH DIAGONAL MOVEMENT)
+        float dx = waypointX - getCenterX();
+        float dy = waypointY - getCenterY();
+        float distance = (float) Math.sqrt(dx * dx + dy * dy);
+        
+        // Reached waypoint
+        if (distance <= WAYPOINT_REACH_DISTANCE) {
+            currentWaypointIndex++;
+            return true;
+        }
+        
+        // Normalize direction vector for smooth diagonal movement
+        dx = dx / distance; // Unit vector
+        dy = dy / distance;
+        
+        // Scale by speed
+        float speed = chaseSpeed * delta;
+        dx = dx * speed;
+        dy = dy * speed;
+        
+        // Move with BOTH X and Y applied together (true diagonal)
+        move(dx, dy, room);
+        return true;
+    }
+    
+    /**
+     * Check if enemy has active path
+     */
+    public boolean hasPath() {
+        return !currentPath.isEmpty() && currentWaypointIndex < currentPath.size();
+    }
+    
+    /**
+     * Clear current path
+     */
+    public void clearPath() {
+        currentPath.clear();
+        currentWaypointIndex = 0;
+    }
+    
+    /**
+     * Get current pathfinding target
+     */
+    public float[] getPathTarget() {
+        return new float[]{pathTargetX, pathTargetY};
+    }
+    
+    // ==================== ENHANCED DEBUG RENDERING ====================
+    
+    /**
+     * ENHANCED DEBUG RENDER with pathfinding visualization
+     * Shows: hearing/vision circles, hitbox, path line
+     */
+    public void renderDebugEnhanced(ShapeRenderer renderer) {
+        // Draw hearing circle (YELLOW - larger)
+        renderer.setColor(1f, 1f, 0f, 0.25f); // Yellow semi-transparent
+        renderer.circle(getCenterX(), getCenterY(), DETECTION_RADIUS);
+        
+        // Draw vision circle (RED - smaller)
+        renderer.setColor(1f, 0f, 0f, 0.35f); // Red semi-transparent
+        renderer.circle(getCenterX(), getCenterY(), VISION_RADIUS);
+
+        // Draw main hitbox with state color
+        Color stateColor = getStateColor();
+        renderer.setColor(stateColor.r, stateColor.g, stateColor.b, 0.5f);
+        renderer.rect(x, y, width, height);
+        
+        // Draw pathfinding visualization
+        if (!currentPath.isEmpty()) {
+            // Draw line from enemy to first waypoint
+            if (currentWaypointIndex < currentPath.size()) {
+                float[] waypoint = currentPath.get(currentWaypointIndex);
+                renderer.setColor(0f, 1f, 1f, 1f); // Cyan
+                renderer.rectLine(getCenterX(), getCenterY(), waypoint[0], waypoint[1], 2f);
+            }
+            
+            // Draw all waypoints
+            renderer.setColor(1f, 1f, 1f, 0.8f); // White
+            for (float[] point : currentPath) {
+                renderer.circle(point[0], point[1], 3f);
+            }
+            
+            // Draw line to final target
+            if (!currentPath.isEmpty()) {
+                renderer.setColor(1f, 0f, 1f, 0.7f); // Magenta
+                renderer.rectLine(getCenterX(), getCenterY(), pathTargetX, pathTargetY, 1f);
+            }
+        }
+    }
 }
