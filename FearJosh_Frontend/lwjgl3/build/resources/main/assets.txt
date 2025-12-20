@@ -1,5 +1,6 @@
 General/vignette.png
 General/white.png
+Items/battery.png
 Items/locker_closed.png
 Items/locker_open.png
 Items/table.png

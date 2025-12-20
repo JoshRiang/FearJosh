@@ -3,11 +3,12 @@ package com.fearjosh.frontend.world.items;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.fearjosh.frontend.entity.Player;
+import com.fearjosh.frontend.entity.BatteryItem;
 import com.fearjosh.frontend.world.Interactable;
 import com.fearjosh.frontend.world.InteractionResult;
 
 /**
- * Battery collectible item - restores flashlight battery when collected.
+ * Battery collectible item - adds BatteryItem to inventory when collected.
  */
 public class Battery implements Interactable {
 
@@ -49,8 +50,9 @@ public class Battery implements Interactable {
     public InteractionResult interact() {
         if (!collected) {
             collected = true;
-            // +25% battery
-            return new InteractionResult(0.25f);
+            // Return BatteryItem to be added to inventory
+            BatteryItem batteryItem = new BatteryItem();
+            return new InteractionResult(0f, batteryItem);
         }
         return InteractionResult.NONE;
     }

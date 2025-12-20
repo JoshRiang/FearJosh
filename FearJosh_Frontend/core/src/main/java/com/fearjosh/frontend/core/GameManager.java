@@ -7,6 +7,7 @@ import com.fearjosh.frontend.difficulty.EasyDifficulty;
 import com.fearjosh.frontend.difficulty.MediumDifficulty;
 import com.fearjosh.frontend.difficulty.HardDifficulty;
 import com.fearjosh.frontend.world.RoomId;
+import com.fearjosh.frontend.systems.Inventory;
 
 /**
  * Singleton GameManager to hold persistent game state
@@ -52,7 +53,11 @@ public class GameManager {
     private int maxLives = 2; // Default medium
     private int currentLives = 2;
 
+    // INVENTORY SYSTEM - 7 slots (Minecraft-style)
+    private Inventory inventory;
+
     private GameManager() {
+        inventory = new Inventory();
     }
 
     public static synchronized GameManager getInstance() {
@@ -387,7 +392,27 @@ public class GameManager {
 
     /**
      * Check if game is over (no lives left)
+
+    // ------------ INVENTORY SYSTEM ------------
+
+    /**
+     * Get player's inventory
      */
+    public Inventory getInventory() {
+        return inventory;
+    }
+
+    /**
+     * Reset inventory (clear all items)
+     */
+    public void resetInventory() {
+        if (inventory != null) {
+            inventory.clear();
+        } else {
+            inventory = new Inventory();
+        }
+    }
+
     public boolean isGameOver() {
         return currentLives <= 0;
     }

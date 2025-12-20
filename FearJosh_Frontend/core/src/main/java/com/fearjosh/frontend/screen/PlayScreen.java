@@ -28,6 +28,11 @@ import com.fearjosh.frontend.world.objects.Locker;
 import com.fearjosh.frontend.core.GameManager;
 import com.fearjosh.frontend.core.RoomDirector;
 import com.fearjosh.frontend.input.InputHandler;
+import com.fearjosh.frontend.systems.Inventory;
+import com.fearjosh.frontend.entity.Item;
+import com.fearjosh.frontend.entity.BatteryItem;
+import com.fearjosh.frontend.systems.Inventory;
+import com.fearjosh.frontend.entity.Item;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -69,6 +74,14 @@ public class PlayScreen implements Screen {
     private static final float HEART_SPACING = 8f;
     private static final float HEART_MARGIN_RIGHT = 20f;
     private static final float HEART_MARGIN_TOP = 40f;
+
+    // Inventory UI (Minecraft-style)
+    private Texture inventorySlotTexture;
+    private Texture inventorySlotSelectedTexture;
+    private static final float SLOT_SIZE = 50f;
+    private static final float SLOT_SPACING = 4f;
+    private static final float INVENTORY_MARGIN_BOTTOM = 20f;
+    private static final int INVENTORY_SLOTS = 7;
 
     // Fog of War system
     private FrameBuffer darknessFrameBuffer;
@@ -200,6 +213,10 @@ public class PlayScreen implements Screen {
 
         // Load health UI
         heartTexture = new Texture("UI/HUD/heart.png");
+
+        // Load inventory slot textures
+        inventorySlotTexture = createInventorySlotTexture(false);
+        inventorySlotSelectedTexture = createInventorySlotTexture(true);
 
         // Room via GameManager
         currentRoomId = gm.getCurrentRoomId();
@@ -376,6 +393,10 @@ public class PlayScreen implements Screen {
         batch.setProjectionMatrix(uiCamera.combined);
         renderHealthBar();
 
+        // Render inventory bar (7 slots, Minecraft-style)
+        batch.setProjectionMatrix(uiCamera.combined);
+        renderInventory();
+
         // Handle pause button click in UI space - HANYA jika state PLAYING
         if (GameManager.getInstance().isPlaying() && Gdx.input.justTouched()) {
             float screenX = Gdx.input.getX();
@@ -488,6 +509,7 @@ public class PlayScreen implements Screen {
         updateBattery(delta);
         findCurrentInteractable();
         handleInteractInput();
+        handleInventoryInput();
         currentRoom.cleanupInactive();
 
         // === ROOM DIRECTOR SYSTEM: Abstract/Physical enemy control ===
@@ -760,6 +782,72 @@ public class PlayScreen implements Screen {
         }
     }
 
+    /**
+     * Recharge battery (used by battery items)
+     */
+    public void rechargeBattery(float amount) {
+        battery = Math.min(BATTERY_MAX, battery + amount);
+        System.out.println("[PlayScreen] Battery recharged to: " + battery);
+    }
+
+    // ======================
+    // INVENTORY INPUT
+    // ======================
+
+    /**
+     * Handle inventory-related input:
+     * - Number keys (1-7) to select slots
+     * - Q key to use selected item
+     */
+    private void handleInventoryInput() {
+        GameManager gm = GameManager.getInstance();
+        Inventory inventory = gm.getInventory();
+
+        // Select slot with number keys (1-7)
+        if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1)) {
+            inventory.setSelectedSlot(0);
+        } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2)) {
+            inventory.setSelectedSlot(1);
+        } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3)) {
+            inventory.setSelectedSlot(2);
+        } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_4)) {
+            inventory.setSelectedSlot(3);
+        } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_5)) {
+            inventory.setSelectedSlot(4);
+        } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_6)) {
+            inventory.setSelectedSlot(5);
+        } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_7)) {
+            inventory.setSelectedSlot(6);
+        }
+
+        // Use selected item with Q key
+        if (Gdx.input.isKeyJustPressed(Input.Keys.Q)) {
+            Item selectedItem = inventory.getSelectedItem();
+            System.out.println("[Inventory] Q pressed - Selected slot: " + inventory.getSelectedSlot() + ", Item: "
+                    + (selectedItem != null ? selectedItem.getName() : "null"));
+
+            if (selectedItem != null) {
+                if (selectedItem.isUsable()) {
+                    boolean success = selectedItem.useItem();
+                    System.out.println("[Inventory] Item use result: " + success);
+                    if (success) {
+                        // Handle specific item effects
+                        if (selectedItem instanceof BatteryItem) {
+                            BatteryItem batteryItem = (BatteryItem) selectedItem;
+                            rechargeBattery(batteryItem.getRechargeAmount());
+                            // Remove battery after use (consumed)
+                            inventory.removeItem(inventory.getSelectedSlot());
+                            System.out.println("[Inventory] Battery consumed and removed");
+                        }
+                        // Add more item types here as needed
+                    }
+                } else {
+                    System.out.println("[Inventory] " + selectedItem.getName() + " cannot be used");
+                }
+            }
+        }
+    }
+
     // ======================
     // INTERACTION
     // ======================
@@ -805,9 +893,33 @@ public class PlayScreen implements Screen {
                 currentInteractable.isActive() &&
                 Gdx.input.isKeyJustPressed(Input.Keys.E)) {
 
+            System.out.println("[Interact] Interacting with: " + currentInteractable.getClass().getSimpleName());
+
             InteractionResult result = currentInteractable.interact();
             if (result != null) {
-                battery = Math.min(BATTERY_MAX, battery + result.getBatteryDelta());
+                System.out.println("[Interact] Result - BatteryDelta: " + result.getBatteryDelta() + ", HasItem: "
+                        + result.hasItem());
+
+                // Legacy: direct battery recharge (for backward compatibility)
+                if (result.getBatteryDelta() > 0) {
+                    battery = Math.min(BATTERY_MAX, battery + result.getBatteryDelta());
+                    System.out.println("[Interact] Direct battery recharge: " + result.getBatteryDelta());
+                }
+
+                // NEW: Add item to inventory
+                if (result.hasItem()) {
+                    GameManager gm = GameManager.getInstance();
+                    Inventory inventory = gm.getInventory();
+                    System.out.println("[Interact] Attempting to add item: " + result.getItem().getName());
+                    boolean added = inventory.addItem(result.getItem());
+                    if (added) {
+                        System.out.println("[Inventory] Picked up " + result.getItem().getName());
+                    } else {
+                        System.out.println("[Inventory] Full! Cannot pick up " + result.getItem().getName());
+                    }
+                }
+            } else {
+                System.out.println("[Interact] Result is null");
             }
         }
     }
@@ -1068,22 +1180,28 @@ public class PlayScreen implements Screen {
     }
 
     /**
-     * Render health bar (hearts) di kanan atas screen
+     * Render health bar (hearts) di atas inventory (Minecraft style)
      */
     private void renderHealthBar() {
         GameManager gm = GameManager.getInstance();
         int currentLives = gm.getCurrentLives();
         int maxLives = gm.getMaxLives();
 
-        // Position hearts from top-right
-        float startX = HEART_MARGIN_RIGHT + HEART_SIZE;
-        float startY = VIRTUAL_HEIGHT - HEART_MARGIN_TOP - HEART_SIZE;
+        // Position hearts above inventory bar (center-left)
+        // Calculate inventory bar position first
+        float totalInventoryWidth = (SLOT_SIZE * INVENTORY_SLOTS) + (SLOT_SPACING * (INVENTORY_SLOTS - 1));
+        float inventoryStartX = (VIRTUAL_WIDTH - totalInventoryWidth) / 2f;
+        float inventoryY = INVENTORY_MARGIN_BOTTOM;
+
+        // Hearts positioned above inventory, slightly to the left
+        float startX = inventoryStartX + 8f; // Small offset from inventory edge
+        float startY = inventoryY + SLOT_SIZE + 8f; // 8px gap above inventory
 
         batch.begin();
 
-        // Draw hearts from right to left
+        // Draw hearts from left to right
         for (int i = 0; i < maxLives; i++) {
-            float x = startX - (i * (HEART_SIZE + HEART_SPACING));
+            float x = startX + (i * (HEART_SIZE + HEART_SPACING));
             float y = startY;
 
             // Only draw if player still has this heart
@@ -1096,6 +1214,78 @@ public class PlayScreen implements Screen {
         }
 
         batch.end();
+    }
+
+    /**
+     * Render inventory bar (7 slots) di bawah tengah screen (Minecraft-style)
+     */
+    private void renderInventory() {
+        GameManager gm = GameManager.getInstance();
+        Inventory inventory = gm.getInventory();
+
+        // Calculate total width of inventory bar
+        float totalWidth = (SLOT_SIZE * INVENTORY_SLOTS) + (SLOT_SPACING * (INVENTORY_SLOTS - 1));
+        float startX = (VIRTUAL_WIDTH - totalWidth) / 2f;
+        float startY = INVENTORY_MARGIN_BOTTOM;
+
+        batch.begin();
+
+        // Draw slots
+        for (int i = 0; i < INVENTORY_SLOTS; i++) {
+            float x = startX + (i * (SLOT_SIZE + SLOT_SPACING));
+            float y = startY;
+
+            // Draw slot background (selected or normal)
+            Texture slotTex = (i == inventory.getSelectedSlot()) ? inventorySlotSelectedTexture : inventorySlotTexture;
+            batch.draw(slotTex, x, y, SLOT_SIZE, SLOT_SIZE);
+
+            // Draw item icon if slot has item
+            Item item = inventory.getItem(i);
+            if (item != null && item.getIcon() != null) {
+                // Draw item icon with small padding
+                float iconPadding = 4f;
+                float iconSize = SLOT_SIZE - (iconPadding * 2);
+                batch.draw(item.getIcon(), x + iconPadding, y + iconPadding, iconSize, iconSize);
+            }
+        }
+
+        batch.end();
+    }
+
+    /**
+     * Create inventory slot texture (normal or selected)
+     */
+    private Texture createInventorySlotTexture(boolean selected) {
+        int size = 64; // Higher res for cleaner look
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+
+        // Background color
+        if (selected) {
+            pixmap.setColor(0.3f, 0.3f, 0.3f, 0.9f); // Lighter for selected
+        } else {
+            pixmap.setColor(0.15f, 0.15f, 0.15f, 0.8f); // Darker for normal
+        }
+        pixmap.fill();
+
+        // Border
+        if (selected) {
+            pixmap.setColor(1f, 1f, 1f, 1f); // White border when selected
+        } else {
+            pixmap.setColor(0.4f, 0.4f, 0.4f, 1f); // Gray border for normal
+        }
+
+        // Draw border (4 rectangles for each edge)
+        int borderWidth = 2;
+        pixmap.fillRectangle(0, 0, size, borderWidth); // Top
+        pixmap.fillRectangle(0, size - borderWidth, size, borderWidth); // Bottom
+        pixmap.fillRectangle(0, 0, borderWidth, size); // Left
+        pixmap.fillRectangle(size - borderWidth, 0, borderWidth, size); // Right
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        pixmap.dispose();
+
+        return texture;
     }
 
     private Texture createLightTexture(int size) {
@@ -1166,6 +1356,16 @@ public class PlayScreen implements Screen {
         Table.disposeTexture();
         lightTexture.dispose();
         darknessFrameBuffer.dispose();
+
+        if (heartTexture != null) {
+            heartTexture.dispose();
+        }
+        if (inventorySlotTexture != null) {
+            inventorySlotTexture.dispose();
+        }
+        if (inventorySlotSelectedTexture != null) {
+            inventorySlotSelectedTexture.dispose();
+        }
     }
 
 }
