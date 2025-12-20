@@ -5,8 +5,8 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
-import com.fearjosh.frontend.manager.GameManager;
-import com.fearjosh.frontend.manager.GameDifficulty;
+import com.fearjosh.frontend.core.GameManager;
+import com.fearjosh.frontend.difficulty.GameDifficulty;
 
 public class HudRenderer {
 
