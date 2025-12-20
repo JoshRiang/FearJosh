@@ -48,6 +48,10 @@ public class GameManager {
     // GAME STATE - kontrol input/update/render per state
     private GameState currentState = GameState.MAIN_MENU;
 
+    // HEALTH/LIVES SYSTEM - based on difficulty
+    private int maxLives = 2; // Default medium
+    private int currentLives = 2;
+
     private GameManager() {
     }
 
@@ -73,6 +77,27 @@ public class GameManager {
         if (currentRoomId == null) {
             currentRoomId = RoomId.R5;
         }
+
+        // Initialize lives based on difficulty
+        initializeLives();
+    }
+
+    /**
+     * Initialize lives based on current difficulty
+     */
+    private void initializeLives() {
+        switch (difficulty) {
+            case EASY:
+                maxLives = 3;
+                break;
+            case MEDIUM:
+                maxLives = 2;
+                break;
+            case HARD:
+                maxLives = 1;
+                break;
+        }
+        currentLives = maxLives;
     }
 
     /**
@@ -321,5 +346,49 @@ public class GameManager {
         // Return random distant room
         int randomIndex = (int) (Math.random() * validRooms.size());
         return validRooms.get(randomIndex);
+    }
+
+    // ------------ HEALTH/LIVES SYSTEM ------------
+
+    public int getCurrentLives() {
+        return currentLives;
+    }
+
+    public int getMaxLives() {
+        return maxLives;
+    }
+
+    /**
+     * Player loses a life (called when caught by Josh)
+     * 
+     * @return true if game over (no more lives)
+     */
+    public boolean loseLife() {
+        currentLives--;
+        System.out.println("[Health] Life lost! Remaining: " + currentLives);
+
+        if (currentLives <= 0) {
+            System.out.println("[Game Over] No more lives!");
+            return true; // Game over
+        }
+
+        return false; // Player can continue
+    }
+
+    /**
+     * Restore one life (for pickup items, etc)
+     */
+    public void gainLife() {
+        if (currentLives < maxLives) {
+            currentLives++;
+            System.out.println("[Health] Life gained! Current: " + currentLives);
+        }
+    }
+
+    /**
+     * Check if game is over (no lives left)
+     */
+    public boolean isGameOver() {
+        return currentLives <= 0;
     }
 }

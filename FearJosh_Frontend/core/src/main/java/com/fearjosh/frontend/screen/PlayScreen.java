@@ -63,6 +63,13 @@ public class PlayScreen implements Screen {
     // overlay ambience gelap (vignette)
     private Texture vignetteTexture;
 
+    // Health UI
+    private Texture heartTexture;
+    private static final float HEART_SIZE = 32f;
+    private static final float HEART_SPACING = 8f;
+    private static final float HEART_MARGIN_RIGHT = 20f;
+    private static final float HEART_MARGIN_TOP = 40f;
+
     // Fog of War system
     private FrameBuffer darknessFrameBuffer;
     private Texture lightTexture; // White circle for punch-through
@@ -190,6 +197,9 @@ public class PlayScreen implements Screen {
 
         // Texture sementara hanya untuk ukuran awal player (placeholder)
         playerTexture = new Texture("General/white.png");
+
+        // Load health UI
+        heartTexture = new Texture("UI/HUD/heart.png");
 
         // Room via GameManager
         currentRoomId = gm.getCurrentRoomId();
@@ -361,6 +371,10 @@ public class PlayScreen implements Screen {
         batch.begin();
         hudRenderer.renderText(batch, font, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
         batch.end();
+
+        // Render health bar (hearts)
+        batch.setProjectionMatrix(uiCamera.combined);
+        renderHealthBar();
 
         // Handle pause button click in UI space - HANYA jika state PLAYING
         if (GameManager.getInstance().isPlaying() && Gdx.input.justTouched()) {
@@ -1049,6 +1063,37 @@ public class PlayScreen implements Screen {
         batch.setColor(1f, 1f, 1f, 1f);
 
         batch.draw(darknessFrameBuffer.getColorBufferTexture(), 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, 0, 0, 1, 1);
+
+        batch.end();
+    }
+
+    /**
+     * Render health bar (hearts) di kanan atas screen
+     */
+    private void renderHealthBar() {
+        GameManager gm = GameManager.getInstance();
+        int currentLives = gm.getCurrentLives();
+        int maxLives = gm.getMaxLives();
+
+        // Position hearts from top-right
+        float startX = HEART_MARGIN_RIGHT + HEART_SIZE;
+        float startY = VIRTUAL_HEIGHT - HEART_MARGIN_TOP - HEART_SIZE;
+
+        batch.begin();
+
+        // Draw hearts from right to left
+        for (int i = 0; i < maxLives; i++) {
+            float x = startX - (i * (HEART_SIZE + HEART_SPACING));
+            float y = startY;
+
+            // Only draw if player still has this heart
+            if (i < currentLives) {
+                batch.draw(heartTexture, x, y, HEART_SIZE, HEART_SIZE);
+            } else {
+                // Optional: draw empty/gray heart for lost lives
+                // For now, just don't draw
+            }
+        }
 
         batch.end();
     }
