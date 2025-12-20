@@ -18,10 +18,10 @@ import java.util.List;
 public class Locker implements Interactable {
 
     private final float x, y, width, height;
-    
+
     // Collision box - FULL RECTANGLE
     private final Rectangle collisionBounds;
-    
+
     private boolean opened = false;
     private boolean active = true;
     private Battery containedBattery;
@@ -35,9 +35,9 @@ public class Locker implements Interactable {
         this.width = width;
         this.height = height;
         this.roomInteractables = roomInteractables;
-        this.closedTexture = new Texture("locker_closed.png");
-        this.openTexture = new Texture("locker_open.png");
-        
+        this.closedTexture = new Texture("Items/locker_closed.png");
+        this.openTexture = new Texture("Items/locker_open.png");
+
         // Full rectangle collision
         this.collisionBounds = new Rectangle(x, y, width, height);
     }
@@ -72,7 +72,8 @@ public class Locker implements Interactable {
 
     @Override
     public void render(ShapeRenderer renderer) {
-        // This method is kept for interface compatibility but textures are rendered via SpriteBatch
+        // This method is kept for interface compatibility but textures are rendered via
+        // SpriteBatch
     }
 
     public void render(SpriteBatch batch) {
@@ -109,7 +110,7 @@ public class Locker implements Interactable {
         }
         return InteractionResult.NONE;
     }
-    
+
     /**
      * Get collision bounds for collision detection with player's footBounds.
      */

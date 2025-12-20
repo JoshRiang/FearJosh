@@ -10,7 +10,7 @@ import com.badlogic.gdx.math.Rectangle;
 public class Table {
 
     private final float x, y, width, height;
-    
+
     // Collision box - FULL RECTANGLE
     private final Rectangle collisionBounds;
 
@@ -19,10 +19,10 @@ public class Table {
         this.y = y;
         this.width = width;
         this.height = height;
-        
+
         // Full rectangle collision
         this.collisionBounds = new Rectangle(x, y, width, height);
-        
+
         ensureTextureLoaded();
     }
 
@@ -30,7 +30,7 @@ public class Table {
 
     private static void ensureTextureLoaded() {
         if (TABLE_TEXTURE == null) {
-            TABLE_TEXTURE = new Texture("table.png");
+            TABLE_TEXTURE = new Texture("Items/table.png");
         }
     }
 
@@ -39,10 +39,11 @@ public class Table {
             TABLE_TEXTURE.dispose();
             TABLE_TEXTURE = null;
         }
-    }   
+    }
 
     public void render(SpriteBatch batch) {
-        if (TABLE_TEXTURE == null) return;
+        if (TABLE_TEXTURE == null)
+            return;
         batch.draw(TABLE_TEXTURE, x, y, width, height);
     }
 
@@ -65,7 +66,7 @@ public class Table {
     public float getWidth() {
         return width;
     }
-    
+
     /**
      * Get collision bounds for collision detection with player's footBounds.
      */

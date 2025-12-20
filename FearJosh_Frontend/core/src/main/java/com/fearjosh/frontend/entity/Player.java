@@ -15,17 +15,17 @@ public class Player {
 
     private float x;
     private float y;
-    
+
     // RENDER SIZE - Visual only (untuk draw sprite)
     private float renderWidth;
     private float renderHeight;
-    
+
     private Direction direction;
-    
+
     // DUAL HITBOX SYSTEM
     // 1) BODY HITBOX - untuk collision dengan ENEMY (full body)
     private Rectangle bodyBounds;
-    
+
     // 2) FOOT HITBOX - untuk collision dengan FURNITURE (hanya kaki)
     private Rectangle footBounds;
 
@@ -33,16 +33,16 @@ public class Player {
     private Animation<TextureRegion> walkUp, walkDown, walkLeft, walkRight;
     private TextureRegion idleUp, idleDown, idleLeft, idleRight;
     private float animationTimer = 0;
-    
+
     // ------------ PLAYER STATE SYSTEM ------------
     private PlayerState currentState;
-    private boolean sprintIntent = false;  // Intent dari input
-    private boolean moving = false;        // Track apakah player bergerak
-    
+    private boolean sprintIntent = false; // Intent dari input
+    private boolean moving = false; // Track apakah player bergerak
+
     // ------------ STAMINA SYSTEM ------------
     private float stamina = 100f;
     private static final float MAX_STAMINA = 100f;
-    
+
     // ------------ FLASHLIGHT ------------
     private boolean flashlightOn = false;
 
@@ -64,23 +64,23 @@ public class Player {
      */
     public void update(float delta, boolean isMoving) {
         this.moving = isMoving;
-        
+
         // Update animation
         if (isMoving) {
             animationTimer += delta;
         } else {
             animationTimer = 0f;
         }
-        
+
         // Update state (handles stamina drain/regen)
         PlayerState nextState = currentState.update(this, delta);
         if (nextState != currentState) {
             setState(nextState);
         }
     }
-    
+
     // ------------ STATE MANAGEMENT ------------
-    
+
     public void setState(PlayerState newState) {
         if (currentState != null) {
             currentState.exit(this);
@@ -90,62 +90,62 @@ public class Player {
             currentState.enter(this);
         }
     }
-    
+
     public PlayerState getCurrentState() {
         return currentState;
     }
-    
+
     /**
      * Get speed multiplier dari current state
      */
     public float getSpeedMultiplier() {
         return currentState != null ? currentState.getSpeedMultiplier() : 1.0f;
     }
-    
+
     // ------------ SPRINT INTENT ------------
-    
+
     public void setSprintIntent(boolean intent) {
         this.sprintIntent = intent;
     }
-    
+
     public boolean hasSprintIntent() {
         return sprintIntent;
     }
-    
+
     // ------------ STAMINA ------------
-    
+
     public float getStamina() {
         return stamina;
     }
-    
+
     public void setStamina(float stamina) {
         this.stamina = Math.max(0, Math.min(stamina, MAX_STAMINA));
     }
-    
+
     public float getMaxStamina() {
         return MAX_STAMINA;
     }
-    
+
     // ------------ FLASHLIGHT ------------
-    
+
     public void toggleFlashlight() {
         flashlightOn = !flashlightOn;
     }
-    
+
     public boolean isFlashlightOn() {
         return flashlightOn;
     }
-    
+
     public void setFlashlightOn(boolean on) {
         this.flashlightOn = on;
     }
-    
+
     // ------------ MOVEMENT STATE ------------
-    
+
     public boolean isMoving() {
         return moving;
     }
-    
+
     public void setMoving(boolean moving) {
         this.moving = moving;
     }
@@ -211,24 +211,24 @@ public class Player {
     public float getRenderWidth() {
         return renderWidth;
     }
-    
+
     /** @return Render height for drawing sprite */
     public float getRenderHeight() {
         return renderHeight;
     }
-    
+
     /** @deprecated Use getRenderWidth() - kept for compatibility */
     public float getWidth() {
-        return renderWidth;  // Return render width instead
+        return renderWidth; // Return render width instead
     }
 
     /** @deprecated Use getRenderHeight() - kept for compatibility */
     public float getHeight() {
-        return renderHeight;  // Return render height instead
+        return renderHeight; // Return render height instead
     }
-    
+
     // ------------ DUAL HITBOX SYSTEM ------------
-    
+
     /**
      * Update posisi SEMUA hitbox setiap kali player bergerak
      * Uses Constants for consistent, tunable hitbox sizing
@@ -238,17 +238,17 @@ public class Player {
         float bodyW = com.fearjosh.frontend.config.Constants.PLAYER_ENEMY_HITBOX_WIDTH;
         float bodyH = com.fearjosh.frontend.config.Constants.PLAYER_ENEMY_HITBOX_HEIGHT;
         bodyBounds.set(x, y, bodyW, bodyH);
-        
+
         // 2) FOOT HITBOX - bagian bawah untuk furniture collision
         float footW = com.fearjosh.frontend.config.Constants.PLAYER_COLLISION_WIDTH;
         float footH = com.fearjosh.frontend.config.Constants.PLAYER_COLLISION_HEIGHT;
         float footOffsetY = com.fearjosh.frontend.config.Constants.PLAYER_COLLISION_OFFSET_Y;
-        float footX = x + (renderWidth - footW) / 2f;  // Center horizontally
-        float footY = y + footOffsetY;  // Bottom of sprite + offset
-        
+        float footX = x + (renderWidth - footW) / 2f; // Center horizontally
+        float footY = y + footOffsetY; // Bottom of sprite + offset
+
         footBounds.set(footX, footY, footW, footH);
     }
-    
+
     /**
      * BODY BOUNDS - untuk collision dengan ENEMY
      * Full-body rectangle dari kepala sampai kaki
@@ -256,7 +256,7 @@ public class Player {
     public Rectangle getBodyBounds() {
         return bodyBounds;
     }
-    
+
     /**
      * FOOT BOUNDS - untuk collision dengan FURNITURE
      * Hanya bagian kaki/bawah sprite
@@ -264,7 +264,7 @@ public class Player {
     public Rectangle getFootBounds() {
         return footBounds;
     }
-    
+
     /**
      * DEBUG: Render hitbox untuk visual debugging
      * Call dari PlayScreen dengan ShapeRenderer
@@ -273,7 +273,7 @@ public class Player {
         // Body hitbox - MERAH (untuk enemy)
         sr.setColor(com.badlogic.gdx.graphics.Color.RED);
         sr.rect(bodyBounds.x, bodyBounds.y, bodyBounds.width, bodyBounds.height);
-        
+
         // Foot hitbox - HIJAU (untuk furniture)
         sr.setColor(com.badlogic.gdx.graphics.Color.GREEN);
         sr.rect(footBounds.x, footBounds.y, footBounds.width, footBounds.height);
@@ -284,21 +284,21 @@ public class Player {
     public void loadAnimations() {
         int frameCols = 4; // jumlah frame per arah
 
-        Texture rightTex = new Texture("jonatan_right.png");
-        Texture leftTex = new Texture("jonatan_left.png");
-        Texture upTex = new Texture("jonatan_up.png");
-        Texture downTex = new Texture("jonatan_down.png");
+        Texture rightTex = new Texture("Sprite/Player/jonatan_right.png");
+        Texture leftTex = new Texture("Sprite/Player/jonatan_left.png");
+        Texture upTex = new Texture("Sprite/Player/jonatan_up.png");
+        Texture downTex = new Texture("Sprite/Player/jonatan_down.png");
 
         // Hitung frameWidth dan frameHeight untuk setiap texture
         int frameWidthRight = rightTex.getWidth() / frameCols;
         int frameHeightRight = rightTex.getHeight();
-        
+
         int frameWidthLeft = leftTex.getWidth() / frameCols;
         int frameHeightLeft = leftTex.getHeight();
-        
+
         int frameWidthUp = upTex.getWidth() / frameCols;
         int frameHeightUp = upTex.getHeight();
-        
+
         int frameWidthDown = downTex.getWidth() / frameCols;
         int frameHeightDown = downTex.getHeight();
 

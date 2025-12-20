@@ -75,8 +75,9 @@ public class PlayScreen implements Screen {
 
     // Movement speed constants
     private static final float WALK_SPEED = 150f;
-    
-    // NOTE: Stamina sekarang di-manage di Player + PlayerState (NormalState/SprintingState)
+
+    // NOTE: Stamina sekarang di-manage di Player + PlayerState
+    // (NormalState/SprintingState)
     // Constants berikut hanya untuk reference/documentation:
     // - STAMINA_MAX = 100f (di Player)
     // - Drain rate = 25f/sec (di SprintingState)
@@ -104,7 +105,7 @@ public class PlayScreen implements Screen {
     private LightingRenderer lightingRenderer;
     private HudRenderer hudRenderer;
     private InputHandler inputHandler;
-    
+
     // DEBUG MODE - untuk visual hitbox dan AI debug
     // Set ke true untuk render hitbox visual (RED=body, GREEN=foot)
     // Set debugEnemy ke true untuk render hearing/vision circles + pathfinding
@@ -164,15 +165,15 @@ public class PlayScreen implements Screen {
 
         // --------- LOAD FLOOR TEXTURES ---------
         // Pastikan file-file ini ada di assets/
-        floorTex1 = new Texture("floor_tiles_1.png");
-        floorTex2 = new Texture("floor_tiles_2.png");
-        floorTex3 = new Texture("floor_tiles_3.png");
+        floorTex1 = new Texture("Map/floor_tiles_1.png");
+        floorTex2 = new Texture("Map/floor_tiles_2.png");
+        floorTex3 = new Texture("Map/floor_tiles_3.png");
 
         floorTiles1 = splitFloorTiles(floorTex1);
         floorTiles2 = splitFloorTiles(floorTex2);
         floorTiles3 = splitFloorTiles(floorTex3);
 
-        vignetteTexture = new Texture("vignette.png");
+        vignetteTexture = new Texture("General/vignette.png");
 
         // Initialize FrameBuffer for darkness layer
         darknessFrameBuffer = new FrameBuffer(Pixmap.Format.RGBA8888, (int) VIRTUAL_WIDTH, (int) VIRTUAL_HEIGHT, false);
@@ -188,7 +189,7 @@ public class PlayScreen implements Screen {
         player = gm.getPlayer();
 
         // Texture sementara hanya untuk ukuran awal player (placeholder)
-        playerTexture = new Texture("white.png");
+        playerTexture = new Texture("General/white.png");
 
         // Room via GameManager
         currentRoomId = gm.getCurrentRoomId();
@@ -219,7 +220,7 @@ public class PlayScreen implements Screen {
         // === NOTIFY ROOMDIRECTOR: Player changed room ===
         if (!gm.isTestingMode()) {
             gm.notifyPlayerRoomChange(id);
-            
+
             // Remove physical enemy when changing rooms (becomes abstract)
             if (josh != null) {
                 RoomDirector rd = gm.getRoomDirector();
@@ -277,18 +278,27 @@ public class PlayScreen implements Screen {
 
         // === RENDER ENEMY (JOSH) - KOTAK BERWARNA ===
         // Enemy HARUS di-render di world layer SEBELUM fog-of-war
-        // Warna = indikator state (YELLOW=searching, RED=chasing, CYAN=stunned)
+        // Animated sprite untuk Josh dengan state-based animation
         if (!GameManager.getInstance().isTestingMode()) {
             if (josh != null && !josh.isDespawned()) {
-                josh.render(shapeRenderer); // <-- RENDER ENEMY DI SINI
-                
+                // Switch to SpriteBatch for sprite rendering
+                shapeRenderer.end();
+                batch.setProjectionMatrix(worldCamera.combined);
+                batch.begin();
+
+                josh.render(batch); // <-- RENDER ENEMY SPRITE
+
+                batch.end();
+                shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
                 // DEBUG: Enhanced visualization (hearing/vision circles + pathfinding)
                 if (debugEnemy) {
                     josh.renderDebugEnhanced(shapeRenderer);
                 }
-                
+
                 // DEBUG: Verify enemy render (optional - can be removed later)
-                // System.out.println("[DEBUG] Enemy rendered at (" + josh.getX() + ", " + josh.getY() + "), state=" + josh.getCurrentStateType());
+                // System.out.println("[DEBUG] Enemy rendered at (" + josh.getX() + ", " +
+                // josh.getY() + "), state=" + josh.getCurrentStateType());
             }
         }
         // ============================================
@@ -299,7 +309,8 @@ public class PlayScreen implements Screen {
 
         shapeRenderer.end();
 
-        // 3) Texture: player + prompt 'E' (NO ENEMY HERE - enemy rendered in ShapeRenderer pass)
+        // 3) Texture: player + prompt 'E'
+        // Enemy sprite sudah di-render sebelumnya menggunakan batch
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
 
@@ -337,12 +348,12 @@ public class PlayScreen implements Screen {
                 player.getMaxStamina(),
                 battery,
                 BATTERY_MAX);
-        
+
         // DEBUG: Render hitboxes jika debugHitbox aktif
         if (debugHitbox && GameManager.getInstance().isPlaying()) {
             player.debugRenderHitboxes(shapeRenderer);
         }
-        
+
         shapeRenderer.end();
 
         // Draw HUD text (difficulty)
@@ -420,7 +431,7 @@ public class PlayScreen implements Screen {
                 float sx = Gdx.input.getX();
                 float sy = Gdx.input.getY();
                 com.badlogic.gdx.math.Vector3 ui = uiCamera.unproject(new com.badlogic.gdx.math.Vector3(sx, sy, 0));
-                
+
                 if (resumeButtonBounds.contains(ui.x, ui.y)) {
                     paused = false;
                     GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
@@ -432,7 +443,7 @@ public class PlayScreen implements Screen {
                     if (ui.x >= testX && ui.x <= testX + testW && ui.y >= testY && ui.y <= testY + testH) {
                         // Go back to main menu - SAVE PROGRESS first, then return to menu
                         GameManager gm = GameManager.getInstance();
-                        gm.saveProgressToSession();  // CRITICAL: Save before leaving
+                        gm.saveProgressToSession(); // CRITICAL: Save before leaving
                         gm.setCurrentState(GameManager.GameState.MAIN_MENU);
                         com.fearjosh.frontend.FearJosh app = this.game;
                         app.setScreen(new com.fearjosh.frontend.screen.MainMenuScreen(app));
@@ -474,25 +485,26 @@ public class PlayScreen implements Screen {
         // Kamera update di akhir logic
         cameraController.update(worldCamera, worldViewport, player);
     }
-    
+
     /**
      * Update RoomDirector and handle enemy spawning
      */
     private void updateRoomDirector(float delta) {
         GameManager gm = GameManager.getInstance();
         RoomDirector rd = gm.getRoomDirector();
-        
-        if (rd == null) return;
-        
+
+        if (rd == null)
+            return;
+
         // Update RoomDirector logic (abstract mode movement, grace period, etc.)
         rd.update(delta);
-        
+
         // Check if enemy should spawn physically
         if (rd.isEnemyPhysicallyPresent() && josh == null) {
             // Spawn enemy at door position
             spawnEnemyPhysically(rd);
         }
-        
+
         // Update physical enemy if present
         if (josh != null && !josh.isDespawned()) {
             josh.update(player, currentRoom, delta);
@@ -507,23 +519,27 @@ public class PlayScreen implements Screen {
             clampEnemyToRoom(josh);
         }
     }
-    
+
     /**
      * Spawn enemy physically at door based on RoomDirector
      */
     private void spawnEnemyPhysically(RoomDirector rd) {
-        float enemyW = 24f;
-        float enemyH = 36f;
-        
+        // Josh size = 3x player size (menakutkan!)
+        float playerW = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_WIDTH;
+        float playerH = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_HEIGHT;
+
+        float enemyW = playerW * 2f; // 38 * 3 = 114
+        float enemyH = playerH * 2f; // 64 * 3 = 192
+
         // Get spawn position from RoomDirector (at door)
         float[] pos = rd.getEnemySpawnPosition(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, enemyW, enemyH);
-        
+
         josh = new Enemy(pos[0], pos[1], enemyW, enemyH);
-        
-        System.out.println("[PlayScreen] ✅ Enemy spawned physically via " + 
-            rd.getEntryDirection() + " door at (" + pos[0] + ", " + pos[1] + ")");
-        System.out.println("[PlayScreen] Enemy size: " + enemyW + "x" + enemyH + 
-            ", state: " + josh.getCurrentStateType());
+
+        System.out.println("[PlayScreen] ✅ Enemy spawned physically via " +
+                rd.getEntryDirection() + " door at (" + pos[0] + ", " + pos[1] + ")");
+        System.out.println("[PlayScreen] Enemy size: " + enemyW + "x" + enemyH +
+                ", state: " + josh.getCurrentStateType());
     }
 
     // ======================
@@ -533,16 +549,16 @@ public class PlayScreen implements Screen {
     private void handleInput(float delta) {
         // 1. Poll input dan execute commands via InputHandler
         inputHandler.update(player, delta);
-        
+
         // 2. Get movement direction dari InputHandler
         float dx = inputHandler.getMoveDirX();
         float dy = inputHandler.getMoveDirY();
         isMoving = inputHandler.isMoving();
-        
+
         // 3. Calculate speed berdasarkan Player state (Normal/Sprinting)
         float baseSpeed = WALK_SPEED;
         float speed = baseSpeed * player.getSpeedMultiplier() * delta;
-        
+
         // 4. Apply movement dengan collision resolution
         if (isMoving) {
             float mx = dx * speed;
@@ -579,9 +595,11 @@ public class PlayScreen implements Screen {
                 }
             }
         }
-        
-        // NOTE: Stamina drain/regen sekarang di-handle oleh PlayerState (NormalState/SprintingState)
-        // NOTE: Flashlight toggle sekarang di-handle oleh InputHandler -> Player.toggleFlashlight()
+
+        // NOTE: Stamina drain/regen sekarang di-handle oleh PlayerState
+        // (NormalState/SprintingState)
+        // NOTE: Flashlight toggle sekarang di-handle oleh InputHandler ->
+        // Player.toggleFlashlight()
     }
 
     // ======================
@@ -621,9 +639,8 @@ public class PlayScreen implements Screen {
         // GUNAKAN BODY HITBOX (full body, bukan foot!)
         com.badlogic.gdx.math.Rectangle playerBody = player.getBodyBounds();
         com.badlogic.gdx.math.Rectangle enemyBounds = new com.badlogic.gdx.math.Rectangle(
-            enemy.getX(), enemy.getY(), enemy.getWidth(), enemy.getHeight()
-        );
-        
+                enemy.getX(), enemy.getY(), enemy.getWidth(), enemy.getHeight());
+
         return playerBody.overlaps(enemyBounds);
     }
 
@@ -1069,7 +1086,7 @@ public class PlayScreen implements Screen {
         // CRITICAL: Disable UI menu input - set InputProcessor to null
         // Ini mencegah tombol menu (termasuk Quit) diklik saat game berjalan
         com.badlogic.gdx.Gdx.input.setInputProcessor(null);
-        
+
         // SET STATE ke PLAYING saat screen ditampilkan
         // (Kecuali jika dari Main Menu yang sudah set PLAYING)
         if (!GameManager.getInstance().isPaused()) {
@@ -1107,4 +1124,3 @@ public class PlayScreen implements Screen {
     }
 
 }
-

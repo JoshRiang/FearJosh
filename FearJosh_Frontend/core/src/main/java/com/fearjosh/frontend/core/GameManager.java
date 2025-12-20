@@ -13,25 +13,26 @@ import com.fearjosh.frontend.world.RoomId;
  * (player instance, current room, difficulty, and game state).
  */
 public class GameManager {
-    
+
     /**
      * GAME STATE SYSTEM
      * Mengontrol input, update, dan render berdasarkan state aktif
      */
     public enum GameState {
-        MAIN_MENU,   // Di main menu, hanya tombol menu aktif
-        PLAYING,     // In-game, world update + player bisa gerak
-        PAUSED       // Game paused, overlay pause + tombol pause aktif
+        MAIN_MENU, // Di main menu, hanya tombol menu aktif
+        CUTSCENE, // Cutscene playing, input terbatas (skip only)
+        PLAYING, // In-game, world update + player bisa gerak
+        PAUSED // Game paused, overlay pause + tombol pause aktif
     }
 
     private static GameManager INSTANCE;
 
     // SESSION MANAGEMENT - NEW SYSTEM
-    private GameSession currentSession;     // Active game session (null = no run)
-    
+    private GameSession currentSession; // Active game session (null = no run)
+
     // ROOM DIRECTOR - Enemy stalking system
-    private RoomDirector roomDirector;      // Controls enemy abstract/physical presence
-    
+    private RoomDirector roomDirector; // Controls enemy abstract/physical presence
+
     // Legacy fields (kept for backward compatibility during transition)
     private Player player;
     private RoomId currentRoomId;
@@ -40,10 +41,10 @@ public class GameManager {
     private float virtualHeight = 600f;
     private GameDifficulty difficulty = GameDifficulty.MEDIUM;
     private DifficultyStrategy difficultyStrategy = new MediumDifficulty();
-    
+
     // TESTING MODE - untuk testing gameplay tanpa enemy mengganggu
     private boolean testingMode = false;
-    
+
     // GAME STATE - kontrol input/update/render per state
     private GameState currentState = GameState.MAIN_MENU;
 
@@ -76,19 +77,20 @@ public class GameManager {
 
     /**
      * Check if there's an active game session that can be resumed
+     * 
      * @return true if currentSession exists and is active
      */
     public boolean hasActiveSession() {
         return currentSession != null && currentSession.isActive();
     }
-    
+
     /**
      * Get current active session (may be null)
      */
     public GameSession getCurrentSession() {
         return currentSession;
     }
-    
+
     /**
      * Start a NEW GAME - creates fresh session and resets all progress
      * This should be called when user clicks "New Game"
@@ -96,29 +98,28 @@ public class GameManager {
     public void startNewGame(float virtualWidth, float virtualHeight) {
         this.virtualWidth = virtualWidth;
         this.virtualHeight = virtualHeight;
-        
+
         // Reset player
         this.player = null;
         this.currentRoomId = null;
         initIfNeeded(virtualWidth, virtualHeight);
-        
+
         // Create new session with current difficulty
-        RoomId startRoom = RoomId.R5;  // Starting room
+        RoomId startRoom = RoomId.R5; // Starting room
         currentSession = new GameSession(
-            difficulty,
-            startRoom,
-            player.getX(),
-            player.getY()
-        );
-        
+                difficulty,
+                startRoom,
+                player.getX(),
+                player.getY());
+
         // Initialize RoomDirector for new game
         if (!testingMode) {
             initializeRoomDirector(startRoom);
         }
-        
+
         System.out.println("[GameManager] NEW GAME started: " + currentSession);
     }
-    
+
     /**
      * RESUME existing session - restores progress without reset
      * This should be called when user clicks "Resume" from menu
@@ -128,14 +129,14 @@ public class GameManager {
             System.err.println("[GameManager] ERROR: No active session to resume!");
             return;
         }
-        
+
         // Restore player state from session
         currentSession.restoreToPlayer(player);
         currentRoomId = currentSession.getCurrentRoomId();
-        
+
         System.out.println("[GameManager] RESUMED session: " + currentSession);
     }
-    
+
     /**
      * Save current progress to session
      * Call this when pausing or changing rooms
@@ -145,7 +146,7 @@ public class GameManager {
             currentSession.updateFromPlayer(player, currentRoomId);
         }
     }
-    
+
     /**
      * @deprecated Use startNewGame() instead
      */
@@ -181,23 +182,25 @@ public class GameManager {
                 break;
         }
     }
-    
+
     /**
      * Check if difficulty can be changed freely
+     * 
      * @return false if active session exists (difficulty is locked)
      */
     public boolean canChangeDifficultyFreely() {
         return !hasActiveSession();
     }
-    
+
     /**
      * Check if changing difficulty requires starting a new game
+     * 
      * @return true if active session exists
      */
     public boolean difficultyChangeRequiresNewGame() {
         return hasActiveSession();
     }
-    
+
     /**
      * Force difficulty change AND start new game
      * Use this after user confirms difficulty change popup
@@ -231,42 +234,42 @@ public class GameManager {
     public float getVirtualHeight() {
         return virtualHeight;
     }
-    
+
     // ------------ TESTING MODE ------------
-    
+
     public boolean isTestingMode() {
         return testingMode;
     }
-    
+
     public void setTestingMode(boolean testingMode) {
         this.testingMode = testingMode;
     }
-    
+
     // ------------ GAME STATE SYSTEM ------------
-    
+
     public GameState getCurrentState() {
         return currentState;
     }
-    
+
     public void setCurrentState(GameState state) {
         this.currentState = state;
         System.out.println("[GameStateManager] State changed to: " + state);
     }
-    
+
     public boolean isInMenu() {
         return currentState == GameState.MAIN_MENU;
     }
-    
+
     public boolean isPlaying() {
         return currentState == GameState.PLAYING;
     }
-    
+
     public boolean isPaused() {
         return currentState == GameState.PAUSED;
     }
-    
+
     // ------------ ROOM DIRECTOR SYSTEM ------------
-    
+
     /**
      * Initialize RoomDirector with enemy starting in different room
      */
@@ -275,17 +278,17 @@ public class GameManager {
         RoomId enemyStartRoom = getRandomDistantRoom(playerStartRoom);
         roomDirector = new RoomDirector(playerStartRoom, enemyStartRoom);
         roomDirector.setDebugMode(com.fearjosh.frontend.config.Constants.DEBUG_ROOM_DIRECTOR);
-        
+
         System.out.println("[GameManager] RoomDirector initialized: enemy starts in " + enemyStartRoom);
     }
-    
+
     /**
      * Get RoomDirector instance
      */
     public RoomDirector getRoomDirector() {
         return roomDirector;
     }
-    
+
     /**
      * Notify RoomDirector when player changes room
      */
@@ -294,14 +297,14 @@ public class GameManager {
             roomDirector.onPlayerEnterRoom(newRoom);
         }
     }
-    
+
     /**
      * Get a random room that's 2-3 moves away from start
      */
     private RoomId getRandomDistantRoom(RoomId start) {
         // Corners are good distant starting points
-        RoomId[] distantRooms = {RoomId.R1, RoomId.R3, RoomId.R7, RoomId.R9};
-        
+        RoomId[] distantRooms = { RoomId.R1, RoomId.R3, RoomId.R7, RoomId.R9 };
+
         // Filter out the player's starting room
         java.util.List<RoomId> validRooms = new java.util.ArrayList<>();
         for (RoomId room : distantRooms) {
@@ -309,14 +312,14 @@ public class GameManager {
                 validRooms.add(room);
             }
         }
-        
+
         if (validRooms.isEmpty()) {
             // Fallback to R1 if player starts in all corners (impossible but safe)
             return RoomId.R1;
         }
-        
+
         // Return random distant room
-        int randomIndex = (int)(Math.random() * validRooms.size());
+        int randomIndex = (int) (Math.random() * validRooms.size());
         return validRooms.get(randomIndex);
     }
 }
