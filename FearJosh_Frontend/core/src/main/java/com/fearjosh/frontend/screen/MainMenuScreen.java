@@ -83,17 +83,19 @@ public class MainMenuScreen implements Screen {
         ls.font = font;
         ls.fontColor = Color.WHITE;
         skin.add("default", ls);
-        
+
         CheckBox.CheckBoxStyle checkStyle = new CheckBox.CheckBoxStyle();
         checkStyle.font = font;
         checkStyle.fontColor = Color.WHITE;
         Pixmap checkboxPixmap = new Pixmap(24, 24, Pixmap.Format.RGBA8888);
         checkboxPixmap.setColor(Color.DARK_GRAY);
         checkboxPixmap.fillRectangle(0, 0, 24, 24);
-        checkStyle.checkboxOff = new com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable(new Texture(checkboxPixmap));
+        checkStyle.checkboxOff = new com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable(
+                new Texture(checkboxPixmap));
         checkboxPixmap.setColor(Color.GREEN);
         checkboxPixmap.fillRectangle(4, 4, 16, 16);
-        checkStyle.checkboxOn = new com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable(new Texture(checkboxPixmap));
+        checkStyle.checkboxOn = new com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable(
+                new Texture(checkboxPixmap));
         checkboxPixmap.dispose();
         skin.add("default", checkStyle);
 
@@ -134,21 +136,21 @@ public class MainMenuScreen implements Screen {
         TextButton settingsBtn = new TextButton("Settings", skin);
         TextButton quitBtn = new TextButton("Quit", skin);
 
-        float btnWidth = 320f;
-        float btnHeight = 56f;
+        float btnWidth = 360f;
+        float btnHeight = 60f;
 
-        card.add(title).padTop(18f).padBottom(6f).row();
-        card.add(subtitle).padBottom(6f).row();
-        card.add(difficultyLabel).padBottom(18f).row();
-        card.add(playBtn).width(btnWidth).height(btnHeight).pad(6f).row();
+        card.add(title).padTop(24f).padBottom(8f).row();
+        card.add(subtitle).padBottom(8f).row();
+        card.add(difficultyLabel).padBottom(24f).row();
+        card.add(playBtn).width(btnWidth).height(btnHeight).pad(8f).row();
         if (resumeBtn != null) {
-            card.add(resumeBtn).width(btnWidth).height(btnHeight).pad(6f).row();
+            card.add(resumeBtn).width(btnWidth).height(btnHeight).pad(8f).row();
         }
-        card.add(settingsBtn).width(btnWidth).height(btnHeight).pad(6f).row();
-        card.add(quitBtn).width(btnWidth).height(btnHeight).padBottom(18f).row();
+        card.add(settingsBtn).width(btnWidth).height(btnHeight).pad(8f).row();
+        card.add(quitBtn).width(btnWidth).height(btnHeight).pad(8f).padBottom(24f).row();
 
-        root.add(card).width(600f).height(360f);
-        
+        root.add(card).width(680f).height(hasSession ? 500f : 450f);
+
         CheckBox testingCheckbox = new CheckBox(" Testing", skin);
         testingCheckbox.setChecked(GameManager.getInstance().isTestingMode());
         testingCheckbox.addListener(new ClickListener() {
@@ -157,7 +159,7 @@ public class MainMenuScreen implements Screen {
                 GameManager.getInstance().setTestingMode(testingCheckbox.isChecked());
             }
         });
-        
+
         Table bottomRightTable = new Table();
         bottomRightTable.setFillParent(true);
         bottomRightTable.bottom().right();
@@ -168,10 +170,12 @@ public class MainMenuScreen implements Screen {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 // STATE CHECK: hanya proses jika state == MAIN_MENU
-                if (!GameManager.getInstance().isInMenu()) return;
-                if (!isActive) return;
+                if (!GameManager.getInstance().isInMenu())
+                    return;
+                if (!isActive)
+                    return;
                 isActive = false;
-                
+
                 // NEW GAME - creates fresh session
                 GameManager.getInstance().startNewGame(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
                 GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
@@ -185,13 +189,15 @@ public class MainMenuScreen implements Screen {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     // STATE CHECK: hanya proses jika state == MAIN_MENU
-                    if (!GameManager.getInstance().isInMenu()) return;
-                    if (!isActive) return;
+                    if (!GameManager.getInstance().isInMenu())
+                        return;
+                    if (!isActive)
+                        return;
                     isActive = false;
-                    
+
                     // RESUME - restore existing session WITHOUT reset
                     GameManager gm = GameManager.getInstance();
-                    gm.resumeSession();  // Restore progress
+                    gm.resumeSession(); // Restore progress
                     gm.setCurrentState(GameManager.GameState.PLAYING);
                     game.setScreen(new PlayScreen(game));
                     System.out.println("[MainMenu] RESUME clicked - continuing existing session");
@@ -203,10 +209,12 @@ public class MainMenuScreen implements Screen {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 // STATE CHECK: hanya proses jika state == MAIN_MENU
-                if (!GameManager.getInstance().isInMenu()) return;
-                if (!isActive) return;
+                if (!GameManager.getInstance().isInMenu())
+                    return;
+                if (!isActive)
+                    return;
                 isActive = false;
-                
+
                 // Settings tidak ubah state (tetap MAIN_MENU)
                 game.setScreen(new SettingsScreen(game));
             }
@@ -216,8 +224,10 @@ public class MainMenuScreen implements Screen {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 // STATE CHECK: hanya proses jika state == MAIN_MENU
-                if (!GameManager.getInstance().isInMenu()) return;
-                if (!isActive) return;
+                if (!GameManager.getInstance().isInMenu())
+                    return;
+                if (!isActive)
+                    return;
                 Gdx.app.exit();
             }
         });
@@ -292,9 +302,11 @@ public class MainMenuScreen implements Screen {
     @Override
     public void render(float delta) {
         // DOUBLE CHECK: hanya render jika state == MAIN_MENU
-        if (!GameManager.getInstance().isInMenu()) return;
-        if (!isActive) return;
-        
+        if (!GameManager.getInstance().isInMenu())
+            return;
+        if (!isActive)
+            return;
+
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
@@ -317,6 +329,12 @@ public class MainMenuScreen implements Screen {
 
     @Override
     public void hide() {
+        // CRITICAL: Remove InputProcessor when leaving menu
+        // This prevents invisible menu from handling clicks
+        if (Gdx.input.getInputProcessor() == stage) {
+            Gdx.input.setInputProcessor(null);
+        }
+        isActive = false;
     }
 
     @Override
