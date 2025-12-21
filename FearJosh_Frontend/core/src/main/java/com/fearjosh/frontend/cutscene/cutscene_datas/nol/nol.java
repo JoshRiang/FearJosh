@@ -11,177 +11,177 @@ import com.fearjosh.frontend.cutscene.CutsceneManager;
  */
 public class nol {
 
-    /**
-     * Register semua cutscene chapter 0 ke CutsceneManager.
-     * Dipanggil dari CutsceneManager.initializeCutscenes().
-     */
-    public static void registerCutscenes(CutsceneManager manager) {
-        CutsceneData nol_satu = new CutsceneData.Builder("0_1")
-                // Background - slow pan
-                .withFadeIn(3)
-                .withMusic("Audio/Music/sad_cutscene_piano_violin.wav")
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_1.jpg")
-                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
-                        .duration(15.0f)
-                        .build())
-                // Middle layer - zoom
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_1_1.png")
-                        .position(20, -60)
-                        .scale(0.3f)
-                        .zoom(CutsceneAnimationType.ZOOM_OUT, 0.05f)
-                        .duration(15.0f)
-                        .build())
-                .addDialog(
-                        "Josh adalah seorang siswa pendiam dan tidak berdaya. ")
-                .addDialog(
-                        "Selama bertahun-tahun, ia menjadi korban bullying di sekolahnya.")
-                .addDialog(
-                        "Tidak ada yang membantunya, tidak teman-temannya, tidak guru-gurunya.")
-                .build();
+        /**
+         * Register semua cutscene chapter 0 ke CutsceneManager.
+         * Dipanggil dari CutsceneManager.initializeCutscenes().
+         */
+        public static void registerCutscenes(CutsceneManager manager) {
+                CutsceneData nol_satu = new CutsceneData.Builder("0_1")
+                                // Background - slow pan
+                                .withFadeIn(3)
+                                .withMusic("Audio/Music/sad_cutscene_piano_violin.wav")
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_1.jpg")
+                                                .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
+                                                .duration(15.0f)
+                                                .build())
+                                // Middle layer - zoom
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_1_1.png")
+                                                .position(20, -60)
+                                                .scale(0.3f)
+                                                .zoom(CutsceneAnimationType.ZOOM_OUT, 0.05f)
+                                                .duration(15.0f)
+                                                .build())
+                                .addDialog(
+                                                "Josh adalah seorang siswa pendiam dan tidak berdaya. ")
+                                .addDialog(
+                                                "Selama bertahun-tahun, ia menjadi korban bullying di sekolahnya.")
+                                .addDialog(
+                                                "Tidak ada yang membantunya, tidak teman-temannya, tidak guru-gurunya.")
+                                .build();
 
-        // Register menggunakan manager yang diberikan
-        manager.registerCutscene("0_1", nol_satu);
+                // Register menggunakan manager yang diberikan
+                manager.registerCutscene("0_1", nol_satu);
 
-        CutsceneData nol_dua = new CutsceneData.Builder("0_2")
-                // Background - slow pan
-                .withFadeIn(0.5f)
-                .withMusic("Audio/Cutscene/0/0_2.wav")
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_2.png")
-                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
-                        .scale(0.4f)
-                        .duration(15.0f)
-                        .build())
-                // Middle layer - zoom
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_2_1.png")
-                        // .position(20, -60)
-                        // .scale(0.3f)
-                        .zoom(CutsceneAnimationType.ZOOM_OUT, 0.05f)
-                        .duration(15.0f)
-                        .build())
-                .addDialog(
-                        "Pada suatu malam, para siswa-siswi merayakan pesta kelulusan di Aula besar sekolah.")
-                .addDialog(
-                        "Malam yang meriah untuk semua orang, kecuali Josh.")
-                .build();
+                CutsceneData nol_dua = new CutsceneData.Builder("0_2")
+                                // Background - slow pan
+                                .withFadeIn(0.5f)
+                                .withMusic("Audio/Cutscene/0/0_2.wav")
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_2.png")
+                                                .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
+                                                .scale(0.4f)
+                                                .duration(15.0f)
+                                                .build())
+                                // Middle layer - zoom
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_2_1.png")
+                                                // .position(20, -60)
+                                                // .scale(0.3f)
+                                                .zoom(CutsceneAnimationType.ZOOM_OUT, 0.05f)
+                                                .duration(15.0f)
+                                                .build())
+                                .addDialog(
+                                                "Pada suatu malam, para siswa-siswi merayakan pesta kelulusan di Aula besar sekolah.")
+                                .addDialog(
+                                                "Malam yang meriah untuk semua orang, kecuali Josh.")
+                                .build();
 
-        // Register menggunakan manager yang diberikan
-        manager.registerCutscene("0_2", nol_dua);
+                // Register menggunakan manager yang diberikan
+                manager.registerCutscene("0_2", nol_dua);
 
-        CutsceneData nol_tiga = new CutsceneData.Builder("0_3")
-                // Background - slow pan
-                // No music - continue from cutscene 2
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_3.png")
-                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
-                        .scale(0.4f)
-                        .duration(15.0f)
-                        .build())
-                // Middle layer - zoom
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_3_1.png")
-                        // .position(20, -60)
-                        // .scale(0.3f)
-                        .zoom(CutsceneAnimationType.ZOOM_OUT, 0.05f)
-                        .duration(15.0f)
-                        .build())
-                .addDialog(
-                        "Josh dengan keputusasaan dan mata yang gelap,")
-                .addDialog(
-                        "mengunci seluruh pintu Aula dari luar.")
-                .build();
+                CutsceneData nol_tiga = new CutsceneData.Builder("0_3")
+                                // Background - slow pan
+                                // No music - continue from cutscene 2
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_3.png")
+                                                .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
+                                                .scale(0.4f)
+                                                .duration(15.0f)
+                                                .build())
+                                // Middle layer - zoom
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_3_1.png")
+                                                // .position(20, -60)
+                                                // .scale(0.3f)
+                                                .zoom(CutsceneAnimationType.ZOOM_OUT, 0.05f)
+                                                .duration(15.0f)
+                                                .build())
+                                .addDialog(
+                                                "Di luar Aula, mata Josh tiba-tiba menjadi hitam. Urat-urat wajahnya menonjol hitam.")
+                                .addDialog(
+                                                "Detak jantung kencang. THUMP. THUMP.")
+                                .build();
 
-        // Register menggunakan manager yang diberikan
-        manager.registerCutscene("0_3", nol_tiga);
+                // Register menggunakan manager yang diberikan
+                manager.registerCutscene("0_3", nol_tiga);
 
-        CutsceneData nol_empat = new CutsceneData.Builder("0_4")
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_4.png")
-                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
-                        .scale(0.4f)
-                        .duration(15.0f)
-                        .build())
-                .addDialog(
-                        "Dia menyiram minyak yang banyak di sekitar Aula.")
-                .addDialog(
-                        "Dan menyalakan api.")
-                .build();
+                CutsceneData nol_empat = new CutsceneData.Builder("0_4")
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_4.jpg")
+                                                .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
+                                                .scale(0.4f)
+                                                .duration(15.0f)
+                                                .build())
+                                .addDialog(
+                                                "Siluet tubuh Josh meledak membesar.")
+                                .addDialog(
+                                                "Dan mulai menerkam ke semua orang  dengan membabi buta")
+                                .build();
 
-        // Register menggunakan manager yang diberikan
-        manager.registerCutscene("0_4", nol_empat);
+                // Register menggunakan manager yang diberikan
+                manager.registerCutscene("0_4", nol_empat);
 
-        CutsceneData nol_lima = new CutsceneData.Builder("0_5")
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_5.png")
-                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
-                        .scale(0.4f)
-                        .duration(15.0f)
-                        .build())
-                .addDialog(
-                        "Api memakan 213 jiwa di malam itu,")
-                .addDialog(
-                        "termasuk Josh.")
-                .addDialog(
-                        "Sehingga warga sekitar menyebut malam itu adalah malam abu.")
-                .build();
+                CutsceneData nol_lima = new CutsceneData.Builder("0_5")
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_5.jpg")
+                                                .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
+                                                .scale(0.4f)
+                                                .duration(15.0f)
+                                                .build())
+                                .addDialog(
+                                                "Meja terlempar. Siswa berlarian menabrak kamera. Layar merah.")
+                                .addDialog(
+                                                "Malam itu, teriakan di mana-mana, dan darah berhamburan")
+                                .addDialog(
+                                                "Gosip langsung tersebar, bahwa siswa bernama Josh yang melakukan semuanya itu")
+                                .build();
 
-        // Register menggunakan manager yang diberikan
-        manager.registerCutscene("0_5", nol_lima);
+                // Register menggunakan manager yang diberikan
+                manager.registerCutscene("0_5", nol_lima);
 
-        CutsceneData nol_enam = new CutsceneData.Builder("0_6")
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_6.jpg")
-                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
-                        .scale(0.4f)
-                        .duration(15.0f)
-                        .build())
-                .addDialog(
-                        "Konon, Josh tidak benar-benar meninggal,")
-                .addDialog(
-                        "tapi berubah menjadi sosok monster api mengerikan.")
-                .build();
+                CutsceneData nol_enam = new CutsceneData.Builder("0_6")
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_6.jpg")
+                                                .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
+                                                .scale(0.4f)
+                                                .duration(15.0f)
+                                                .build())
+                                .addDialog(
+                                                "Di luar, polisi menembakan lampu sorot ke arah gedung sekolah.")
+                                .addDialog(
+                                                "Membuat Josh menjadi lebih tenang, dan bersembunyi di dalam sekolah ")
+                                .build();
 
-        // Register menggunakan manager yang diberikan
-        manager.registerCutscene("0_6", nol_enam);
+                // Register menggunakan manager yang diberikan
+                manager.registerCutscene("0_6", nol_enam);
 
-        CutsceneData nol_tujuh = new CutsceneData.Builder("0_7")
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_7.jpg")
-                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
-                        .scale(0.4f)
-                        .duration(15.0f)
-                        .build())
-                .addDialog(
-                        "Tidak ada orang yang berani memasuki sekolah itu lagi,")
-                .addDialog(
-                        "Kini telah menjadi terbengkalai dan angker.")
-                .withFadeOut(5)
-                .build();
+                CutsceneData nol_tujuh = new CutsceneData.Builder("0_7")
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_7.jpg")
+                                                .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
+                                                .scale(0.4f)
+                                                .duration(15.0f)
+                                                .build())
+                                .addDialog(
+                                                "Berkat upaya dari polisi, masih ada yang berhasil selamat dan keluar dari sekolah.")
+                                .addDialog(
+                                                "Namun, Josh dikunci di dalam sekolah, dan mayat-mayat masih belum bisa dievakuasi")
+                                .withFadeOut(5)
+                                .build();
 
-        // Register menggunakan manager yang diberikan
-        manager.registerCutscene("0_7", nol_tujuh);
+                // Register menggunakan manager yang diberikan
+                manager.registerCutscene("0_7", nol_tujuh);
 
-        CutsceneData nol_delapan = new CutsceneData.Builder("0_8")
-                .withFadeIn(0.5f)
-                .withMusic("Cutscene/0/0_8.wav")
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_8.jpg")
-                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
-                        .scale(0.4f)
-                        .duration(15.0f)
-                        .build())
-                .addDialog(
-                        "Dua tahun setelah Malam Abu, Jonathan (kakak kandung Josh) pulang ke kampung halaman.")
-                .addDialog(
-                        "Ia mendengar rumor tentang monster di sekolah itu yang adalah adiknya, Josh.")
-                .build();
+                CutsceneData nol_delapan = new CutsceneData.Builder("0_8")
+                                .withFadeIn(0.5f)
+                                .withMusic("Cutscene/0/0_8.wav")
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_8.jpg")
+                                                .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
+                                                .scale(0.4f)
+                                                .duration(15.0f)
+                                                .build())
+                                .addDialog(
+                                                "Besok harinya, Jonathan (kakak kandung Josh) khawatir dengan adiknya yang belum pulang.")
+                                .addDialog(
+                                                "Sehingga, iya langsung pergi ke sekolah untuk mencari Josh, yang konon katanya sudah berubah menjadi monster.")
+                                .build();
 
-        // Register menggunakan manager yang diberikan
-        manager.registerCutscene("0_8", nol_delapan);
+                // Register menggunakan manager yang diberikan
+                manager.registerCutscene("0_8", nol_delapan);
 
-        CutsceneData nol_sembilan = new CutsceneData.Builder("0_9")
-                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_9.jpg")
-                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
-                        .scale(0.4f)
-                        .duration(15.0f)
-                        .build())
-                .addDialog("Jonathan",
-                        "Jangan khawatir Josh, kita akan pulang bersama")
-                .build();
+                CutsceneData nol_sembilan = new CutsceneData.Builder("0_9")
+                                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_9.jpg")
+                                                .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
+                                                .scale(0.4f)
+                                                .duration(15.0f)
+                                                .build())
+                                .addDialog("Jonathan",
+                                                "Jangan khawatir Josh, kita akan pulang bersama")
+                                .build();
 
-        // Register menggunakan manager yang diberikan
-        manager.registerCutscene("0_9", nol_sembilan);
-    }
+                // Register menggunakan manager yang diberikan
+                manager.registerCutscene("0_9", nol_sembilan);
+        }
 }

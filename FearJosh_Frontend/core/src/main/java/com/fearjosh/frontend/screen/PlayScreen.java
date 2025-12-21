@@ -99,6 +99,20 @@ public class PlayScreen implements Screen {
     private static final float HEART_SIZE = 32f;
     private static final float HEART_SPACING = 8f;
 
+    // ------------ AMBIENT AUDIO ------------
+    private long cricketSoundId = -1;
+    private long rainSoundId = -1;
+    private long footstepSoundId = -1;
+
+    // Monster audio
+    private float monsterGruntTimer = 0f;
+    private static final float MONSTER_GRUNT_INTERVAL = 3.0f; // Grunt every 3 seconds
+    private static final float MONSTER_PROXIMITY_RANGE = 700f; // Range for grunt sound
+
+    private float monsterRoarTimer = 0f;
+    private static final float MONSTER_ROAR_INTERVAL = 3.0f; // Roar every 4 seconds
+    private static final float MONSTER_ROAR_RANGE = 400f; // Closer range for roar (aggressive)
+
     // Inventory UI (Minecraft-style)
     private Texture inventorySlotTexture;
     private Texture inventorySlotSelectedTexture;
@@ -625,6 +639,52 @@ public class PlayScreen implements Screen {
         if (josh != null && !josh.isDespawned() && !playerFullyCaptured) {
             josh.update(player, currentRoom, delta);
 
+            // === MONSTER PROXIMITY SOUND ===
+            // Calculate distance from monster to player
+            float dx = josh.getCenterX() - player.getCenterX();
+            float dy = josh.getCenterY() - player.getCenterY();
+            float distance = (float) Math.sqrt(dx * dx + dy * dy);
+
+            // Update grunt timer
+            monsterGruntTimer += delta;
+
+            // Play grunt sound when monster is close and timer expires
+            if (distance < MONSTER_PROXIMITY_RANGE && monsterGruntTimer >= MONSTER_GRUNT_INTERVAL) {
+                // Calculate volume based on distance (closer = louder)
+                // At distance 0: volume = 1.0, at MONSTER_PROXIMITY_RANGE: volume = 0.2
+                float volumeMultiplier = 1.0f - (distance / MONSTER_PROXIMITY_RANGE) * 0.8f;
+                volumeMultiplier = Math.max(0.2f, Math.min(1.0f, volumeMultiplier));
+
+                AudioManager.getInstance().playSound("Audio/Effect/monster_grunt_sound_effect.wav", volumeMultiplier);
+                monsterGruntTimer = 0f; // Reset timer
+
+                if (com.fearjosh.frontend.config.Constants.DEBUG_ROOM_DIRECTOR) {
+                    System.out.println(
+                            "[Monster] Grunt at distance: " + (int) distance + ", volume: " + volumeMultiplier);
+                }
+            }
+
+            // === MONSTER ROAR SOUND (CHASE STATE + VERY CLOSE) ===
+            monsterRoarTimer += delta;
+
+            // Play roar sound when monster is CHASING and VERY close
+            if (josh.getCurrentStateType() == com.fearjosh.frontend.state.enemy.EnemyStateType.CHASING
+                    && distance < MONSTER_ROAR_RANGE
+                    && monsterRoarTimer >= MONSTER_ROAR_INTERVAL) {
+                // Calculate volume based on distance (closer = louder)
+                // At distance 0: volume = 1.0, at MONSTER_ROAR_RANGE: volume = 0.3
+                float roarVolume = 1.0f - (distance / MONSTER_ROAR_RANGE) * 0.7f;
+                roarVolume = Math.max(0.3f, Math.min(1.0f, roarVolume));
+
+                AudioManager.getInstance().playSound("Audio/Effect/monster_roar_sound_effect.wav", roarVolume);
+                monsterRoarTimer = 0f; // Reset timer
+
+                if (com.fearjosh.frontend.config.Constants.DEBUG_ROOM_DIRECTOR) {
+                    System.out.println(
+                            "[Monster] ROAR at distance: " + (int) distance + ", volume: " + roarVolume + " [CHASING]");
+                }
+            }
+
             // Check collision with player (CAPTURE SYSTEM)
             if (checkEnemyPlayerCollision(josh, player)) {
                 if (!playerBeingCaught && !playerFullyCaptured) {
@@ -749,9 +809,14 @@ public class PlayScreen implements Screen {
             if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
                 escapeProgress += ESCAPE_PROGRESS_PER_PRESS;
                 escapeSpacebarPresses++;
+                AudioManager.getInstance().playSound("Audio/Effect/cut_rope_sound_effect.wav");
+
                 if (escapeProgress > 1f) {
                     escapeProgress = 1f;
                 }
+
+                // Play cut rope sound effect
+
                 System.out.println("[MINIGAME] Space pressed! Progress: " + (escapeProgress * 100) + "% ("
                         + escapeSpacebarPresses + " presses)");
             }
@@ -773,7 +838,23 @@ public class PlayScreen implements Screen {
         // 2. Get movement direction dari InputHandler
         float dx = inputHandler.getMoveDirX();
         float dy = inputHandler.getMoveDirY();
+        boolean wasMoving = isMoving;
         isMoving = inputHandler.isMoving();
+
+        // Handle footstep sound
+        AudioManager audioManager = AudioManager.getInstance();
+        if (isMoving && !wasMoving) {
+            // Started moving - play footstep sound
+            if (footstepSoundId == -1) {
+                footstepSoundId = audioManager.loopSound("Audio/Effect/footstep_sound_effect.wav");
+            }
+        } else if (!isMoving && wasMoving) {
+            // Stopped moving - stop footstep sound
+            if (footstepSoundId != -1) {
+                audioManager.stopSound("Audio/Effect/footstep_sound_effect.wav", footstepSoundId);
+                footstepSoundId = -1;
+            }
+        }
 
         // 3. Calculate speed berdasarkan Player state (Normal/Sprinting)
         float baseSpeed = WALK_SPEED;
@@ -1622,6 +1703,17 @@ public class PlayScreen implements Screen {
         // Stop menu music when entering gameplay
         AudioManager.getInstance().stopMusic();
 
+        // Start gameplay ambient audio
+        AudioManager audioManager = AudioManager.getInstance();
+        audioManager.playMusic("Audio/Music/background_playing_music.wav", true);
+        cricketSoundId = audioManager.loopSound("Audio/Effect/cricket_sound_effect.wav");
+        rainSoundId = audioManager.loopSound("Audio/Effect/rain_sound_effect.wav");
+        System.out.println("[PlayScreen.show()] Ambient audio started - Music, Cricket, Rain");
+
+        // Reset monster sound timers
+        monsterGruntTimer = 0f;
+        monsterRoarTimer = 0f;
+
         // Reset capture state for new game
         playerBeingCaught = false;
         playerFullyCaptured = false;
@@ -1654,21 +1746,57 @@ public class PlayScreen implements Screen {
     public void pause() {
         paused = true;
         GameManager.getInstance().setCurrentState(GameManager.GameState.PAUSED);
+
+        // Pause ambient audio when game is paused
+        AudioManager.getInstance().pauseMusic();
     }
 
     @Override
     public void resume() {
         paused = false;
         GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
+
+        // Resume ambient audio when game is resumed
+        AudioManager.getInstance().resumeMusic();
     }
 
     @Override
     public void hide() {
         // Clean up resources when screen is hidden
         paused = false;
+
+        // Stop all ambient audio when leaving the screen
+        AudioManager audioManager = AudioManager.getInstance();
+        audioManager.stopMusic();
+        if (cricketSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/cricket_sound_effect.wav", cricketSoundId);
+            cricketSoundId = -1;
+        }
+        if (rainSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/rain_sound_effect.wav", rainSoundId);
+            rainSoundId = -1;
+        }
+        if (footstepSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/footstep_sound_effect.wav", footstepSoundId);
+            footstepSoundId = -1;
+        }
+        System.out.println("[PlayScreen.hide()] Ambient audio stopped");
     }
 
     public void dispose() {
+        // Stop ambient audio first
+        AudioManager audioManager = AudioManager.getInstance();
+        audioManager.stopMusic();
+        if (cricketSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/cricket_sound_effect.wav", cricketSoundId);
+        }
+        if (rainSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/rain_sound_effect.wav", rainSoundId);
+        }
+        if (footstepSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/footstep_sound_effect.wav", footstepSoundId);
+        }
+
         shapeRenderer.dispose();
         batch.dispose();
         font.dispose();
