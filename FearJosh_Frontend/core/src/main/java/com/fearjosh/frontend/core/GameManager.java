@@ -81,7 +81,7 @@ public class GameManager {
             player.loadAnimations();
         }
         if (currentRoomId == null) {
-            currentRoomId = RoomId.GYM; // Start in GYM (inside school)
+            currentRoomId = RoomId.getStartingRoom(); // Use method from RoomId
         }
 
         // Initialize lives based on difficulty
@@ -136,7 +136,7 @@ public class GameManager {
         initIfNeeded(virtualWidth, virtualHeight);
 
         // Create new session with current difficulty
-        RoomId startRoom = RoomId.LOBBY; // Starting room changed to LOBBY for new map system
+        RoomId startRoom = RoomId.getStartingRoom(); // Starting room (LOBBY)
         currentSession = new GameSession(
                 difficulty,
                 startRoom,
@@ -328,29 +328,42 @@ public class GameManager {
     }
 
     /**
-     * Get a random room that's 2-3 moves away from start
-     * Updated to use new school-based RoomId enum
+    /**
+     * Get a random room that's distant from start (corners of the map)
      */
     private RoomId getRandomDistantRoom(RoomId start) {
-        // Use classrooms and gym as distant starting points
-        RoomId[] distantRooms = { RoomId.CLASS_1A, RoomId.CLASS_8A, RoomId.CLASS_1B, RoomId.CLASS_8B, RoomId.GYM };
+        // Distant rooms from lobby - far classrooms and gym
+        RoomId[] distantRooms = { 
+            RoomId.GYM,            // Large gym at top
+            RoomId.CLASS_8A,       // Far right top row
+            RoomId.CLASS_8B,       // Far right bottom row
+            RoomId.CLASS_1A        // First classroom top row
+        };
 
-        // Filter out the player's starting room
+        // Filter out the player's starting room and adjacent rooms
         java.util.List<RoomId> validRooms = new java.util.ArrayList<>();
         for (RoomId room : distantRooms) {
-            if (room != start) {
+            if (room != start && !isAdjacent(room, start)) {
                 validRooms.add(room);
             }
         }
 
         if (validRooms.isEmpty()) {
-            // Fallback to HALLWAY if player starts in all corners (impossible but safe)
-            return RoomId.HALLWAY;
+            // Fallback to GYM if player somehow starts near all distant rooms
+            return RoomId.GYM;
         }
 
         // Return random distant room
         int randomIndex = (int) (Math.random() * validRooms.size());
         return validRooms.get(randomIndex);
+    }
+    
+    /**
+     * Check if two rooms are adjacent (share a door)
+     */
+    private boolean isAdjacent(RoomId a, RoomId b) {
+        if (a == null || b == null) return false;
+        return a.up() == b || a.down() == b || a.left() == b || a.right() == b;
     }
 
     // ------------ HEALTH/LIVES SYSTEM ------------

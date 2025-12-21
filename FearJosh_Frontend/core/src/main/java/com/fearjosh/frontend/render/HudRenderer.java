@@ -99,12 +99,23 @@ public class HudRenderer {
             BitmapFont font,
             float virtualWidth,
             float virtualHeight) {
-        GameDifficulty diff = GameManager.getInstance().getDifficulty();
+        GameManager gm = GameManager.getInstance();
+        
+        // Display current room name (center-top)
+        String roomName = gm.getCurrentRoomId().getDisplayName();
+        Color old = font.getColor();
+        font.setColor(new Color(1f, 1f, 1f, 0.9f));
+        // Calculate center position
+        com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font, roomName);
+        float roomNameX = (virtualWidth - layout.width) / 2f;
+        font.draw(batch, roomName, roomNameX, virtualHeight - 8f);
+        
+        // Display difficulty (top-right)
+        GameDifficulty diff = gm.getDifficulty();
         String text = "Difficulty: " + diff.name().substring(0, 1).toUpperCase()
                 + diff.name().substring(1).toLowerCase();
-        Color old = font.getColor();
         font.setColor(new Color(0.85f, 0.85f, 0.9f, 1f));
-        font.draw(batch, text, virtualWidth - 160f, virtualHeight - 8f);
+        font.draw(batch, text, virtualWidth - 160f, virtualHeight - 28f);
         font.setColor(old);
     }
 }

@@ -274,6 +274,7 @@ public class RoomDirector {
     }
 
     /**
+    /**
      * Get row index based on room type (simplified for school layout)
      * Row 0 = Bottom (Parking, Bottom classrooms)
      * Row 1 = Middle (Lobby, Hallway, Special rooms)

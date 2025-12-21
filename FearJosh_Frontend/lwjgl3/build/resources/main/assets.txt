@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Audio/Cutscene/0/0_2.wav
 Audio/Effect/cricket_sound_effect.wav
 Audio/Effect/cut_rope_sound_effect.wav
@@ -24,6 +25,9 @@ Cutscene/0/0_7.jpg
 Cutscene/0/0_8.jpg
 Cutscene/0/0_8.wav
 Cutscene/0/0_9.jpg
+=======
+Cutscene/0/erasebg-transformed.png
+>>>>>>> origin/map
 General/vignette.png
 General/white.png
 Items/battery.png
