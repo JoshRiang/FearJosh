@@ -148,9 +148,40 @@ public class nol {
                         "Tidak ada orang yang berani memasuki sekolah itu lagi,")
                 .addDialog(
                         "Kini telah menjadi terbengkalai dan angker.")
+                .withFadeOut(5)
                 .build();
 
         // Register menggunakan manager yang diberikan
         manager.registerCutscene("0_7", nol_tujuh);
+
+        CutsceneData nol_delapan = new CutsceneData.Builder("0_8")
+                .withFadeIn(0.5f)
+                .withMusic("Cutscene/0/0_8.wav")
+                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_8.jpg")
+                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
+                        .scale(0.4f)
+                        .duration(15.0f)
+                        .build())
+                .addDialog(
+                        "Dua tahun setelah Malam Abu, Jonathan (kakak kandung Josh) pulang ke kampung halaman.")
+                .addDialog(
+                        "Ia mendengar rumor tentang monster di sekolah itu yang adalah adiknya, Josh.")
+                .build();
+
+        // Register menggunakan manager yang diberikan
+        manager.registerCutscene("0_8", nol_delapan);
+
+        CutsceneData nol_sembilan = new CutsceneData.Builder("0_9")
+                .addLayer(new CutsceneLayer.Builder("Cutscene/0/0_9.jpg")
+                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.05f)
+                        .scale(0.4f)
+                        .duration(15.0f)
+                        .build())
+                .addDialog("Jonathan",
+                        "Jangan khawatir Josh, kita akan pulang bersama")
+                .build();
+
+        // Register menggunakan manager yang diberikan
+        manager.registerCutscene("0_9", nol_sembilan);
     }
 }
