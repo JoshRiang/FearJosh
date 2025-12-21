@@ -163,6 +163,15 @@ public class CutsceneScreen implements Screen {
             }
         }
 
+        System.out.println("[Cutscene] Created: " + cutsceneData.getCutsceneId());
+        System.out.println("[Cutscene] Total dialogs: " + cutsceneData.getDialogCount());
+        System.out.println("[Cutscene] Layers: " + layerStates.size);
+    }
+
+    @Override
+    public void show() {
+        Gdx.input.setInputProcessor(null);
+
         // Smart music handling:
         // - If cutscene has music, play it (stop previous if different)
         // - If cutscene has no music, continue playing previous music
@@ -189,13 +198,6 @@ public class CutsceneScreen implements Screen {
         }
 
         System.out.println("[Cutscene] Started: " + cutsceneData.getCutsceneId());
-        System.out.println("[Cutscene] Total dialogs: " + cutsceneData.getDialogCount());
-        System.out.println("[Cutscene] Layers: " + layerStates.size);
-    }
-
-    @Override
-    public void show() {
-        Gdx.input.setInputProcessor(null);
     }
 
     @Override
@@ -449,11 +451,6 @@ public class CutsceneScreen implements Screen {
         shapeRenderer.end();
 
         Gdx.gl.glDisable(GL20.GL_BLEND);
-
-        // Debug: show current fade state
-        if (fadeAlpha > 0.01f) {
-            System.out.println("[Fade] State: " + fadeState + ", Alpha: " + fadeAlpha);
-        }
     }
 
     private void advanceDialog() {
@@ -490,10 +487,8 @@ public class CutsceneScreen implements Screen {
     }
 
     private void actualEndCutscene() {
-        // Stop music if it was playing
-        if (cutsceneData.hasMusic()) {
-            AudioManager.getInstance().stopMusic();
-        }
+        // Don't stop music - let it continue to next screen
+        // Music will be managed by the next screen's show() method
 
         // Go to next screen
         if (nextScreen != null) {
@@ -516,10 +511,7 @@ public class CutsceneScreen implements Screen {
 
     @Override
     public void hide() {
-        // Stop music when leaving screen
-        if (cutsceneData.hasMusic()) {
-            AudioManager.getInstance().stopMusic();
-        }
+        // Don't stop music - let it continue to next screen
     }
 
     @Override
