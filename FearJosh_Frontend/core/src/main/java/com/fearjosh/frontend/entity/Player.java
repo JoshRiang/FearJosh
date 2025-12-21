@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import com.fearjosh.frontend.state.player.PlayerState;
 import com.fearjosh.frontend.state.player.NormalState;
+import com.fearjosh.frontend.systems.AudioManager;
 
 public class Player {
 
@@ -134,6 +135,8 @@ public class Player {
 
     public void toggleFlashlight() {
         flashlightOn = !flashlightOn;
+        // Play flashlight click sound
+        AudioManager.getInstance().playSound("Audio/Effect/flashlight_click_sound_effect.wav");
     }
 
     public boolean isFlashlightOn() {

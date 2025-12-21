@@ -12,6 +12,7 @@ import com.fearjosh.frontend.world.RoomId;
 import com.fearjosh.frontend.world.objects.Table;
 import com.fearjosh.frontend.world.objects.Locker;
 import com.fearjosh.frontend.systems.PathfindingSystem;
+import com.fearjosh.frontend.render.TiledMapManager;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -19,6 +20,9 @@ public class Enemy {
 
     private float x, y;
     private float width, height;
+
+    // TMX collision detection
+    private TiledMapManager tiledMapManager;
 
     // speed dasar
     private float chaseSpeed = 90f;
@@ -38,6 +42,27 @@ public class Enemy {
     private Animation<TextureRegion> walkLeftAnimation;
     private Animation<TextureRegion> walkRightAnimation;
     private Animation<TextureRegion> idleAnimation;
+
+    // Searching state animations (separate sprites)
+    private Texture searchingUpTexture;
+    private Texture searchingDownTexture;
+    private Texture searchingLeftTexture;
+    private Texture searchingRightTexture;
+    private Animation<TextureRegion> searchingUpAnimation;
+    private Animation<TextureRegion> searchingDownAnimation;
+    private Animation<TextureRegion> searchingLeftAnimation;
+    private Animation<TextureRegion> searchingRightAnimation;
+
+    // Chasing state animations (separate sprites)
+    private Texture chasingUpTexture;
+    private Texture chasingDownTexture;
+    private Texture chasingLeftTexture;
+    private Texture chasingRightTexture;
+    private Animation<TextureRegion> chasingUpAnimation;
+    private Animation<TextureRegion> chasingDownAnimation;
+    private Animation<TextureRegion> chasingLeftAnimation;
+    private Animation<TextureRegion> chasingRightAnimation;
+
     private float animationTime = 0f;
 
     // Josh idle sprites
@@ -101,52 +126,43 @@ public class Enemy {
 
     /**
      * Load Josh sprite animations from assets
-     * Spritesheet layout: 4x4 grid (64x64 per frame)
-     * Row 0: UP facing (4 frames)
-     * Row 1: DOWN facing (4 frames)
-     * Row 2: LEFT facing (4 frames)
-     * Row 3: RIGHT facing (4 frames)
+     * Using individual sprite sheets for chasing and searching states
      */
     private void loadAnimations() {
-        // Load general animation spritesheet (4x4 = 16 frames total)
-        // Total size: 519x480 pixels
-        joshSpriteSheet = new Texture("Sprite/Enemy/josh_general_animation.png");
+        // Load chasing sprite sheets (fast aggressive movement)
+        chasingUpTexture = new Texture("Sprite/Enemy/josh_chasing_up.png");
+        chasingDownTexture = new Texture("Sprite/Enemy/josh_chasing_down.png");
+        chasingLeftTexture = new Texture("Sprite/Enemy/josh_chasing_left.png");
+        chasingRightTexture = new Texture("Sprite/Enemy/josh_chasing_right.png");
 
-        // Calculate frame size: 519÷4 = 129.75, 480÷4 = 120
-        // Using 129x120 per frame (slightly less to fit 4 columns)
-        TextureRegion[][] tmp = TextureRegion.split(joshSpriteSheet, 129, 120);
+        // Split each texture into 4 frames (1 row x 4 columns)
+        TextureRegion[][] chasingUpFrames = TextureRegion.split(chasingUpTexture,
+                chasingUpTexture.getWidth() / 4, chasingUpTexture.getHeight());
+        TextureRegion[][] chasingDownFrames = TextureRegion.split(chasingDownTexture,
+                chasingDownTexture.getWidth() / 4, chasingDownTexture.getHeight());
+        TextureRegion[][] chasingLeftFrames = TextureRegion.split(chasingLeftTexture,
+                chasingLeftTexture.getWidth() / 4, chasingLeftTexture.getHeight());
+        TextureRegion[][] chasingRightFrames = TextureRegion.split(chasingRightTexture,
+                chasingRightTexture.getWidth() / 4, chasingRightTexture.getHeight());
 
-        // Create UP animation (row 0, 4 frames)
-        TextureRegion[] upFrames = new TextureRegion[4];
-        for (int i = 0; i < 4; i++) {
-            upFrames[i] = tmp[0][i];
-        }
-        walkUpAnimation = new Animation<>(0.15f, upFrames);
-        walkUpAnimation.setPlayMode(Animation.PlayMode.LOOP);
+        // Create chasing animations (medium pace)
+        chasingUpAnimation = new Animation<>(0.2f, chasingUpFrames[0]);
+        chasingUpAnimation.setPlayMode(Animation.PlayMode.LOOP);
 
-        // Create DOWN animation (row 1, 4 frames)
-        TextureRegion[] downFrames = new TextureRegion[4];
-        for (int i = 0; i < 4; i++) {
-            downFrames[i] = tmp[1][i];
-        }
-        walkDownAnimation = new Animation<>(0.15f, downFrames);
-        walkDownAnimation.setPlayMode(Animation.PlayMode.LOOP);
+        chasingDownAnimation = new Animation<>(0.2f, chasingDownFrames[0]);
+        chasingDownAnimation.setPlayMode(Animation.PlayMode.LOOP);
 
-        // Create LEFT animation (row 2, 4 frames)
-        TextureRegion[] leftFrames = new TextureRegion[4];
-        for (int i = 0; i < 4; i++) {
-            leftFrames[i] = tmp[2][i];
-        }
-        walkLeftAnimation = new Animation<>(0.15f, leftFrames);
-        walkLeftAnimation.setPlayMode(Animation.PlayMode.LOOP);
+        chasingLeftAnimation = new Animation<>(0.2f, chasingLeftFrames[0]);
+        chasingLeftAnimation.setPlayMode(Animation.PlayMode.LOOP);
 
-        // Create RIGHT animation (row 3, 4 frames)
-        TextureRegion[] rightFrames = new TextureRegion[4];
-        for (int i = 0; i < 4; i++) {
-            rightFrames[i] = tmp[3][i];
-        }
-        walkRightAnimation = new Animation<>(0.15f, rightFrames);
-        walkRightAnimation.setPlayMode(Animation.PlayMode.LOOP);
+        chasingRightAnimation = new Animation<>(0.2f, chasingRightFrames[0]);
+        chasingRightAnimation.setPlayMode(Animation.PlayMode.LOOP);
+
+        // Set walk animations to use chasing animations (for compatibility)
+        walkUpAnimation = chasingUpAnimation;
+        walkDownAnimation = chasingDownAnimation;
+        walkLeftAnimation = chasingLeftAnimation;
+        walkRightAnimation = chasingRightAnimation;
 
         // Load idle sprites
         joshIdle1 = new Texture("Sprite/Enemy/josh_idle_1.png");
@@ -162,7 +178,47 @@ public class Enemy {
         // Load caught sprite
         joshCaughtTexture = new Texture("Sprite/Enemy/josh_caught.png");
 
-        System.out.println("[Enemy] Josh 4-directional animations loaded successfully");
+        // Load searching animations (separate sprite sheets)
+        loadSearchingAnimations();
+
+        System.out.println("[Enemy] Josh animations loaded - Chasing and Searching sprites");
+    }
+
+    /**
+     * Load searching state animations from separate sprite sheets
+     */
+    private void loadSearchingAnimations() {
+        // Load searching sprite sheets (each has 4 frames in a row)
+        searchingUpTexture = new Texture("Sprite/Enemy/josh_searching_up.png");
+        searchingDownTexture = new Texture("Sprite/Enemy/josh_searching_down.png");
+        searchingLeftTexture = new Texture("Sprite/Enemy/josh_searching_left.png");
+        searchingRightTexture = new Texture("Sprite/Enemy/josh_searching_right.png");
+
+        // Split each texture into 4 frames (1 row x 4 columns)
+        // Assuming each sprite is around 64x64 pixels per frame
+        TextureRegion[][] searchUpFrames = TextureRegion.split(searchingUpTexture,
+                searchingUpTexture.getWidth() / 4, searchingUpTexture.getHeight());
+        TextureRegion[][] searchDownFrames = TextureRegion.split(searchingDownTexture,
+                searchingDownTexture.getWidth() / 4, searchingDownTexture.getHeight());
+        TextureRegion[][] searchLeftFrames = TextureRegion.split(searchingLeftTexture,
+                searchingLeftTexture.getWidth() / 4, searchingLeftTexture.getHeight());
+        TextureRegion[][] searchRightFrames = TextureRegion.split(searchingRightTexture,
+                searchingRightTexture.getWidth() / 4, searchingRightTexture.getHeight());
+
+        // Create searching animations (slower pace for searching behavior)
+        searchingUpAnimation = new Animation<>(0.3f, searchUpFrames[0]);
+        searchingUpAnimation.setPlayMode(Animation.PlayMode.LOOP);
+
+        searchingDownAnimation = new Animation<>(0.3f, searchDownFrames[0]);
+        searchingDownAnimation.setPlayMode(Animation.PlayMode.LOOP);
+
+        searchingLeftAnimation = new Animation<>(0.3f, searchLeftFrames[0]);
+        searchingLeftAnimation.setPlayMode(Animation.PlayMode.LOOP);
+
+        searchingRightAnimation = new Animation<>(0.3f, searchRightFrames[0]);
+        searchingRightAnimation.setPlayMode(Animation.PlayMode.LOOP);
+
+        System.out.println("[Enemy] Josh searching animations loaded successfully");
     }
 
     public void changeState(EnemyState newState) {
@@ -254,8 +310,12 @@ public class Enemy {
         } else if (currentStateType == EnemyStateType.STUNNED) {
             // Show caught sprite when stunned
             currentFrame = new TextureRegion(joshCaughtTexture);
+        } else if (currentStateType == EnemyStateType.SEARCHING) {
+            // Searching animation - slower, more cautious movement
+            Animation<TextureRegion> searchAnimation = getSearchingAnimationForDirection();
+            currentFrame = searchAnimation.getKeyFrame(animationTime, true);
         } else {
-            // Idle animation when searching
+            // Idle animation as fallback
             currentFrame = idleAnimation.getKeyFrame(animationTime, true);
         }
 
@@ -284,6 +344,31 @@ public class Enemy {
             } else {
                 // No movement, default to down
                 return walkDownAnimation;
+            }
+        }
+    }
+
+    /**
+     * Get appropriate searching animation based on movement direction
+     */
+    private Animation<TextureRegion> getSearchingAnimationForDirection() {
+        // Determine primary direction based on last movement
+        if (Math.abs(lastDy) > Math.abs(lastDx)) {
+            // Vertical movement is dominant
+            if (lastDy > 0) {
+                return searchingUpAnimation; // Moving up
+            } else {
+                return searchingDownAnimation; // Moving down
+            }
+        } else {
+            // Horizontal movement is dominant (or equal)
+            if (lastDx > 0) {
+                return searchingRightAnimation; // Moving right
+            } else if (lastDx < 0) {
+                return searchingLeftAnimation; // Moving left
+            } else {
+                // No movement, default to down
+                return searchingDownAnimation;
             }
         }
     }
@@ -390,6 +475,20 @@ public class Enemy {
     }
 
     private boolean collidesWithFurniture(Room room) {
+        // Check TMX collision first if available
+        if (tiledMapManager != null && tiledMapManager.hasCurrentMap()) {
+            // Only check feet position (bottom center) - enemy can overlap walls visually
+            // but cannot walk through blocked tiles
+            float feetX = x + width / 2f; // Center X
+            float feetY = y + height * 0.1f; // Near bottom of sprite
+
+            // Check single point at feet
+            if (!tiledMapManager.isWalkable(feetX, feetY)) {
+                return true;
+            }
+        }
+
+        // Also check procedural furniture
         for (Table t : room.getTables()) {
             if (overlapsRect(x, y, width, height, t.getX(), t.getY(), t.getWidth(), t.getHeight()))
                 return true;
@@ -399,6 +498,13 @@ public class Enemy {
                 return true;
         }
         return false;
+    }
+
+    /**
+     * Set TiledMapManager for TMX collision detection
+     */
+    public void setTiledMapManager(TiledMapManager manager) {
+        this.tiledMapManager = manager;
     }
 
     private boolean overlapsRect(float x, float y, float w, float h,
@@ -636,13 +742,32 @@ public class Enemy {
      * Dispose textures when enemy is destroyed
      */
     public void dispose() {
-        if (joshSpriteSheet != null)
-            joshSpriteSheet.dispose();
+        // Dispose idle and caught textures
         if (joshIdle1 != null)
             joshIdle1.dispose();
         if (joshIdle2 != null)
             joshIdle2.dispose();
         if (joshCaughtTexture != null)
             joshCaughtTexture.dispose();
+
+        // Dispose searching textures
+        if (searchingUpTexture != null)
+            searchingUpTexture.dispose();
+        if (searchingDownTexture != null)
+            searchingDownTexture.dispose();
+        if (searchingLeftTexture != null)
+            searchingLeftTexture.dispose();
+        if (searchingRightTexture != null)
+            searchingRightTexture.dispose();
+
+        // Dispose chasing textures
+        if (chasingUpTexture != null)
+            chasingUpTexture.dispose();
+        if (chasingDownTexture != null)
+            chasingDownTexture.dispose();
+        if (chasingLeftTexture != null)
+            chasingLeftTexture.dispose();
+        if (chasingRightTexture != null)
+            chasingRightTexture.dispose();
     }
 }
