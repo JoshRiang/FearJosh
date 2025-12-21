@@ -81,7 +81,7 @@ public class GameManager {
             player.loadAnimations();
         }
         if (currentRoomId == null) {
-            currentRoomId = RoomId.R5;
+            currentRoomId = RoomId.GYM; // Start in GYM (inside school)
         }
 
         // Initialize lives based on difficulty
@@ -136,7 +136,7 @@ public class GameManager {
         initIfNeeded(virtualWidth, virtualHeight);
 
         // Create new session with current difficulty
-        RoomId startRoom = RoomId.R5; // Starting room
+        RoomId startRoom = RoomId.LOBBY; // Starting room changed to LOBBY for new map system
         currentSession = new GameSession(
                 difficulty,
                 startRoom,
@@ -329,10 +329,11 @@ public class GameManager {
 
     /**
      * Get a random room that's 2-3 moves away from start
+     * Updated to use new school-based RoomId enum
      */
     private RoomId getRandomDistantRoom(RoomId start) {
-        // Corners are good distant starting points
-        RoomId[] distantRooms = { RoomId.R1, RoomId.R3, RoomId.R7, RoomId.R9 };
+        // Use classrooms and gym as distant starting points
+        RoomId[] distantRooms = { RoomId.CLASS_1A, RoomId.CLASS_8A, RoomId.CLASS_1B, RoomId.CLASS_8B, RoomId.GYM };
 
         // Filter out the player's starting room
         java.util.List<RoomId> validRooms = new java.util.ArrayList<>();
@@ -343,8 +344,8 @@ public class GameManager {
         }
 
         if (validRooms.isEmpty()) {
-            // Fallback to R1 if player starts in all corners (impossible but safe)
-            return RoomId.R1;
+            // Fallback to HALLWAY if player starts in all corners (impossible but safe)
+            return RoomId.HALLWAY;
         }
 
         // Return random distant room

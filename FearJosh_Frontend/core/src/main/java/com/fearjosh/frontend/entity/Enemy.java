@@ -12,6 +12,7 @@ import com.fearjosh.frontend.world.RoomId;
 import com.fearjosh.frontend.world.objects.Table;
 import com.fearjosh.frontend.world.objects.Locker;
 import com.fearjosh.frontend.systems.PathfindingSystem;
+import com.fearjosh.frontend.render.TiledMapManager;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -19,6 +20,9 @@ public class Enemy {
 
     private float x, y;
     private float width, height;
+
+    // TMX collision detection
+    private TiledMapManager tiledMapManager;
 
     // speed dasar
     private float chaseSpeed = 90f;
@@ -141,17 +145,17 @@ public class Enemy {
         TextureRegion[][] chasingRightFrames = TextureRegion.split(chasingRightTexture,
                 chasingRightTexture.getWidth() / 4, chasingRightTexture.getHeight());
 
-        // Create chasing animations (fast pace)
-        chasingUpAnimation = new Animation<>(0.1f, chasingUpFrames[0]);
+        // Create chasing animations (medium pace)
+        chasingUpAnimation = new Animation<>(0.2f, chasingUpFrames[0]);
         chasingUpAnimation.setPlayMode(Animation.PlayMode.LOOP);
 
-        chasingDownAnimation = new Animation<>(0.1f, chasingDownFrames[0]);
+        chasingDownAnimation = new Animation<>(0.2f, chasingDownFrames[0]);
         chasingDownAnimation.setPlayMode(Animation.PlayMode.LOOP);
 
-        chasingLeftAnimation = new Animation<>(0.1f, chasingLeftFrames[0]);
+        chasingLeftAnimation = new Animation<>(0.2f, chasingLeftFrames[0]);
         chasingLeftAnimation.setPlayMode(Animation.PlayMode.LOOP);
 
-        chasingRightAnimation = new Animation<>(0.1f, chasingRightFrames[0]);
+        chasingRightAnimation = new Animation<>(0.2f, chasingRightFrames[0]);
         chasingRightAnimation.setPlayMode(Animation.PlayMode.LOOP);
 
         // Set walk animations to use chasing animations (for compatibility)
@@ -202,16 +206,16 @@ public class Enemy {
                 searchingRightTexture.getWidth() / 4, searchingRightTexture.getHeight());
 
         // Create searching animations (slower pace for searching behavior)
-        searchingUpAnimation = new Animation<>(0.2f, searchUpFrames[0]);
+        searchingUpAnimation = new Animation<>(0.3f, searchUpFrames[0]);
         searchingUpAnimation.setPlayMode(Animation.PlayMode.LOOP);
 
-        searchingDownAnimation = new Animation<>(0.2f, searchDownFrames[0]);
+        searchingDownAnimation = new Animation<>(0.3f, searchDownFrames[0]);
         searchingDownAnimation.setPlayMode(Animation.PlayMode.LOOP);
 
-        searchingLeftAnimation = new Animation<>(0.2f, searchLeftFrames[0]);
+        searchingLeftAnimation = new Animation<>(0.3f, searchLeftFrames[0]);
         searchingLeftAnimation.setPlayMode(Animation.PlayMode.LOOP);
 
-        searchingRightAnimation = new Animation<>(0.2f, searchRightFrames[0]);
+        searchingRightAnimation = new Animation<>(0.3f, searchRightFrames[0]);
         searchingRightAnimation.setPlayMode(Animation.PlayMode.LOOP);
 
         System.out.println("[Enemy] Josh searching animations loaded successfully");
@@ -471,6 +475,20 @@ public class Enemy {
     }
 
     private boolean collidesWithFurniture(Room room) {
+        // Check TMX collision first if available
+        if (tiledMapManager != null && tiledMapManager.hasCurrentMap()) {
+            // Only check feet position (bottom center) - enemy can overlap walls visually
+            // but cannot walk through blocked tiles
+            float feetX = x + width / 2f; // Center X
+            float feetY = y + height * 0.1f; // Near bottom of sprite
+
+            // Check single point at feet
+            if (!tiledMapManager.isWalkable(feetX, feetY)) {
+                return true;
+            }
+        }
+
+        // Also check procedural furniture
         for (Table t : room.getTables()) {
             if (overlapsRect(x, y, width, height, t.getX(), t.getY(), t.getWidth(), t.getHeight()))
                 return true;
@@ -480,6 +498,13 @@ public class Enemy {
                 return true;
         }
         return false;
+    }
+
+    /**
+     * Set TiledMapManager for TMX collision detection
+     */
+    public void setTiledMapManager(TiledMapManager manager) {
+        this.tiledMapManager = manager;
     }
 
     private boolean overlapsRect(float x, float y, float w, float h,

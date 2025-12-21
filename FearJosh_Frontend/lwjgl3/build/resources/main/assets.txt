@@ -36,6 +36,34 @@ Map/floor_tiles_2.png
 Map/floor_tiles_2G.png
 Map/floor_tiles_3.png
 Map/floor_tiles_3G.png
+Maps/A4.png
+Maps/A4.tsx
+Maps/A5.png
+Maps/A5.tsx
+Maps/BloodTileset1.png
+Maps/BloodTileset1.tsx
+Maps/BloodTileset2.png
+Maps/BloodTileset2.tsx
+Maps/C9GUgb 1.png
+Maps/C9GUgb 1.tsx
+Maps/CLASSROOM_1A.tmx
+Maps/CLASSROOM_2A.tmx
+Maps/Inside_C.png
+Maps/Inside_C.tsx
+Maps/Inside_D - Copy.png
+Maps/Inside_D.png
+Maps/Inside_D.tsx
+Maps/Inside_E.png
+Maps/Inside_E.tsx
+Maps/Locker.tsx
+Maps/Outside.png
+Maps/blood.tsx
+Maps/gym.tmx
+Maps/hallway.tmx
+Maps/lobby.tmx
+Maps/stairs.png
+Maps/stairs.tsx
+Maps/test.tsx
 Sprite/Enemy/josh_caught.png
 Sprite/Enemy/josh_chasing_down.png
 Sprite/Enemy/josh_chasing_left.png

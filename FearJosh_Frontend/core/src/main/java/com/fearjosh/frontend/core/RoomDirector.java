@@ -274,47 +274,50 @@ public class RoomDirector {
     }
 
     /**
-     * Get row index (0-2) from RoomId
+     * Get row index based on room type (simplified for school layout)
+     * Row 0 = Bottom (Parking, Bottom classrooms)
+     * Row 1 = Middle (Lobby, Hallway, Special rooms)
+     * Row 2 = Top (Top classrooms, Gym)
      */
     private int getRow(RoomId room) {
-        switch (room) {
-            case R1:
-            case R2:
-            case R3:
-                return 0;
-            case R4:
-            case R5:
-            case R6:
-                return 1;
-            case R7:
-            case R8:
-            case R9:
-                return 2;
-            default:
-                return 1; // Center fallback
+        if (room == null)
+            return 1;
+        String name = room.name();
+
+        // Top row - classrooms ending with A and gym
+        if (name.endsWith("A") || name.equals("GYM")) {
+            return 2;
         }
+        // Bottom row - classrooms ending with B and parking
+        if (name.endsWith("B") || name.equals("PARKING")) {
+            return 0;
+        }
+        // Middle row - hallway, lobby, special rooms
+        return 1;
     }
 
     /**
-     * Get column index (0-2) from RoomId
+     * Get column index based on room type (simplified for school layout)
+     * Returns relative position 0-2 for approximate location
      */
     private int getCol(RoomId room) {
-        switch (room) {
-            case R1:
-            case R4:
-            case R7:
-                return 0;
-            case R2:
-            case R5:
-            case R8:
-                return 1;
-            case R3:
-            case R6:
-            case R9:
-                return 2;
-            default:
-                return 1; // Center fallback
+        if (room == null)
+            return 1;
+        String name = room.name();
+
+        // Left side - parking, lobby, class 1-3
+        if (name.equals("PARKING") || name.equals("LOBBY") ||
+                name.contains("_1") || name.contains("_2") || name.contains("_3")) {
+            return 0;
         }
+        // Middle - hallway, class 4-5, janitor, restroom
+        if (name.equals("HALLWAY") || name.equals("GYM") ||
+                name.contains("_4") || name.contains("_5") ||
+                name.equals("JANITOR") || name.equals("RESTROOM")) {
+            return 1;
+        }
+        // Right side - class 6-8, teachers room
+        return 2;
     }
 
     /**
@@ -416,15 +419,17 @@ public class RoomDirector {
 
     /**
      * Get all adjacent rooms for a given room
+     * 
      * @param room The room to get adjacents for
-     * @return Array of adjacent RoomIds (may contain nulls if no adjacent room exists)
+     * @return Array of adjacent RoomIds (may contain nulls if no adjacent room
+     *         exists)
      */
     private RoomId[] getAdjacentRooms(RoomId room) {
         return new RoomId[] {
-            room.up(),
-            room.down(),
-            room.left(),
-            room.right()
+                room.up(),
+                room.down(),
+                room.left(),
+                room.right()
         };
     }
 
