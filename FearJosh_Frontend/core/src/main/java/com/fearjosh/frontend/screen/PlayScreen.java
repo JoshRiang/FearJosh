@@ -22,9 +22,9 @@ import com.fearjosh.frontend.entity.Player;
 import com.fearjosh.frontend.factory.RoomFactory;
 import com.fearjosh.frontend.render.HudRenderer;
 import com.fearjosh.frontend.render.LightingRenderer;
+import com.fearjosh.frontend.render.TiledMapManager;
 import com.fearjosh.frontend.world.*;
-import com.fearjosh.frontend.world.objects.Table;
-import com.fearjosh.frontend.world.objects.Locker;
+import com.fearjosh.frontend.world.RoomId.DoorPosition;
 import com.fearjosh.frontend.core.GameManager;
 import com.fearjosh.frontend.core.RoomDirector;
 import com.fearjosh.frontend.input.InputHandler;
@@ -32,12 +32,9 @@ import com.fearjosh.frontend.systems.Inventory;
 import com.fearjosh.frontend.entity.Item;
 import com.fearjosh.frontend.entity.BatteryItem;
 import com.fearjosh.frontend.systems.AudioManager;
-import com.fearjosh.frontend.systems.Inventory;
-import com.fearjosh.frontend.entity.Item;
 
 import java.util.EnumMap;
 import java.util.Map;
-import java.util.Random;
 
 public class PlayScreen implements Screen {
 
@@ -52,9 +49,8 @@ public class PlayScreen implements Screen {
     // Zoom camera ( <1 = zoom in )
     private static final float CAMERA_ZOOM = 0.7f;
 
-    private static final float DOOR_WIDTH = 80f;
-    private static final float WALL_THICKNESS = 6f;
-    private static final float ENTRY_OFFSET = 20f;
+    private static final float ROOM_BORDER = 5f;     // Collision boundary at room edges (fallback)
+    private static final float ENTRY_OFFSET = 20f;   // Offset for door entry positioning
 
     private static final float INTERACT_RANGE = 60f;
 
@@ -91,7 +87,7 @@ public class PlayScreen implements Screen {
 
     // Rooms
     private final Map<RoomId, Room> rooms = new EnumMap<>(RoomId.class);
-    private RoomId currentRoomId = RoomId.R5;
+    private RoomId currentRoomId = RoomId.getStartingRoom();
     private Room currentRoom;
 
     // Movement speed constants
@@ -112,6 +108,12 @@ public class PlayScreen implements Screen {
 
     // Interaction
     private Interactable currentInteractable = null;
+    private com.fearjosh.frontend.render.TiledMapManager.TileInteractable currentTileInteractable = null;
+
+    // Floating message above player (e.g., "It's locked...")
+    private String floatingMessage = null;
+    private float floatingMessageTimer = 0f;
+    private static final float FLOATING_MESSAGE_DURATION = 2f;
 
     // Flag movement (untuk animasi)
     private boolean isMoving = false;
@@ -126,6 +128,7 @@ public class PlayScreen implements Screen {
     private LightingRenderer lightingRenderer;
     private HudRenderer hudRenderer;
     private InputHandler inputHandler;
+    private TiledMapManager tiledMapManager;
 
     // DEBUG MODE - untuk visual hitbox dan AI debug
     // Set ke true untuk render hitbox visual (RED=body, GREEN=foot)
@@ -136,33 +139,28 @@ public class PlayScreen implements Screen {
     private boolean paused = false;
     private com.badlogic.gdx.math.Rectangle resumeButtonBounds = new com.badlogic.gdx.math.Rectangle();
 
-    // ------------ FLOOR TILES ------------
-    // ukuran world untuk 1 tile lantai (lebih kecil -> lebih rapat)
-    private static final float FLOOR_TILE_SIZE = 32f;
 
-    private final int FLOOR_COLS;
-    private final int FLOOR_ROWS;
-
-    private Texture floorTex1;
-    private Texture floorTex2;
-    private Texture floorTex3;
-
-    // masing-masing tileset berisi 16 tile kecil (4x4)
-    private TextureRegion[] floorTiles1;
-    private TextureRegion[] floorTiles2;
-    private TextureRegion[] floorTiles3;
-
-    // tiap room punya grid sendiri (FLOOR_ROWS x FLOOR_COLS)
-    private final Map<RoomId, TextureRegion[][]> roomFloors = new EnumMap<>(RoomId.class);
-
-    private final Random rng = new Random();
+    
+    // ======================
+    // ROOM DIMENSION HELPERS
+    // ======================
+    
+    /**
+     * Get the width of the current room
+     */
+    private float getRoomWidth() {
+        return currentRoomId != null ? currentRoomId.getWidth() : VIRTUAL_WIDTH;
+    }
+    
+    /**
+     * Get the height of the current room
+     */
+    private float getRoomHeight() {
+        return currentRoomId != null ? currentRoomId.getHeight() : VIRTUAL_HEIGHT;
+    }
 
     public PlayScreen(FearJosh game) {
         this.game = game;
-
-        // Hitung jumlah kolom/baris floor berdasarkan ukuran tile
-        FLOOR_COLS = (int) Math.ceil(VIRTUAL_WIDTH / FLOOR_TILE_SIZE);
-        FLOOR_ROWS = (int) Math.ceil(VIRTUAL_HEIGHT / FLOOR_TILE_SIZE);
 
         // Renderer
         shapeRenderer = new ShapeRenderer();
@@ -183,16 +181,7 @@ public class PlayScreen implements Screen {
         lightingRenderer = new LightingRenderer();
         hudRenderer = new HudRenderer();
         inputHandler = new InputHandler();
-
-        // --------- LOAD FLOOR TEXTURES ---------
-        // Pastikan file-file ini ada di assets/
-        floorTex1 = new Texture("Map/floor_tiles_1.png");
-        floorTex2 = new Texture("Map/floor_tiles_2.png");
-        floorTex3 = new Texture("Map/floor_tiles_3.png");
-
-        floorTiles1 = splitFloorTiles(floorTex1);
-        floorTiles2 = splitFloorTiles(floorTex2);
-        floorTiles3 = splitFloorTiles(floorTex3);
+        tiledMapManager = new TiledMapManager();
 
         vignetteTexture = new Texture("General/vignette.png");
 
@@ -222,6 +211,16 @@ public class PlayScreen implements Screen {
         // Room via GameManager
         currentRoomId = gm.getCurrentRoomId();
         switchToRoom(currentRoomId);
+        
+        // Position player at first spawn point if available
+        if (tiledMapManager.hasCurrentMap()) {
+            com.fearjosh.frontend.render.TiledMapManager.SpawnInfo firstSpawn = tiledMapManager.getFirstSpawnPoint();
+            if (firstSpawn != null) {
+                player.setX(firstSpawn.x - player.getRenderWidth() / 2f);
+                player.setY(firstSpawn.y - player.getRenderHeight() / 2f);
+                System.out.println("[PlayScreen] Positioned player at first spawn: (" + firstSpawn.x + ", " + firstSpawn.y + ")");
+            }
+        }
 
         // === NEW ENEMY SYSTEM: RoomDirector-based spawning ===
         // Enemy spawn is now handled by RoomDirector (abstract/physical mode)
@@ -241,8 +240,24 @@ public class PlayScreen implements Screen {
         currentRoomId = id;
         GameManager gm = GameManager.getInstance();
         gm.setCurrentRoomId(id);
+        
+        // Get room-specific dimensions
+        float roomWidth = id.getWidth();
+        float roomHeight = id.getHeight();
+        
+        // Keep viewport at fixed virtual size - camera will handle showing room bounds
+        // This prevents stretching caused by changing aspect ratios
+        // worldViewport stays at VIRTUAL_WIDTH x VIRTUAL_HEIGHT
+        
+        // Update camera controller bounds for the new room size
+        cameraController.setWorldBounds(roomWidth, roomHeight);
+        
+        // Load TMX map for this room (if available)
+        tiledMapManager.loadMapForRoom(id);
+        
+        // Create room with custom dimensions
         currentRoom = rooms.computeIfAbsent(id,
-                rid -> RoomFactory.createRoom(rid, VIRTUAL_WIDTH, VIRTUAL_HEIGHT));
+                rid -> RoomFactory.createRoom(rid, rid.getWidth(), rid.getHeight()));
         currentInteractable = null;
 
         // === NOTIFY ROOMDIRECTOR: Player changed room ===
@@ -284,25 +299,23 @@ public class PlayScreen implements Screen {
         shapeRenderer.setProjectionMatrix(worldCamera.combined);
         batch.setProjectionMatrix(worldCamera.combined);
 
-        // 1) Gambar lantai + meja + locker (pakai batch)
+        // 1) Draw floor and background layers (TMX or procedural)
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
 
-        drawFloor(); // lantai tile
-
-        for (Table t : currentRoom.getTables())
-            t.render(batch); // <-- sekarang pakai sprite meja
-
-        for (Locker l : currentRoom.getLockers())
-            l.render(batch); // <-- sekarang pakai sprite locker
+        // If TMX map is loaded, render layers below the player (excluding Y-sorted layers like furniture)
+        if (tiledMapManager.hasCurrentMap()) {
+            batch.end();
+            tiledMapManager.renderBelowPlayerExcludingYSorted(worldCamera);
+            batch.begin();
+        }
 
         batch.end();
 
-        // 2) Shapes: lighting, walls, enemy, item (masih pakai ShapeRenderer)
+        // 2) Shapes: lighting (walls are now in TMX)
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
         lightingRenderer.render(shapeRenderer, player, player.isFlashlightOn(), battery / BATTERY_MAX);
-        drawWalls();
 
         // === RENDER ENEMY (JOSH) - KOTAK BERWARNA ===
         // Enemy HARUS di-render di world layer SEBELUM fog-of-war
@@ -342,23 +355,58 @@ public class PlayScreen implements Screen {
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
 
-        // player - use render size (separate from hitbox)
-        TextureRegion frame = player.getCurrentFrame(isMoving);
-        batch.draw(frame,
-                player.getX(),
-                player.getY(),
-                player.getRenderWidth(),
-                player.getRenderHeight());
+        // Y-sorted rendering for furniture layers and player
+        // This makes tables/chairs render above or below player based on Y position
+        if (tiledMapManager.hasCurrentMap()) {
+            TextureRegion playerFrame = player.getCurrentFrame(isMoving);
+            tiledMapManager.renderWithYSort(worldCamera, batch, player.getY(), () -> {
+                batch.draw(playerFrame,
+                        player.getX(),
+                        player.getY(),
+                        player.getRenderWidth(),
+                        player.getRenderHeight());
+            });
+        } else {
+            // Fallback: render player directly without Y-sort
+            TextureRegion frame = player.getCurrentFrame(isMoving);
+            batch.draw(frame,
+                    player.getX(),
+                    player.getY(),
+                    player.getRenderWidth(),
+                    player.getRenderHeight());
+        }
 
-        // prompt E
+        // prompt E for legacy interactables
         if (currentInteractable != null && currentInteractable.isActive()) {
             font.draw(batch,
                     "E",
                     currentInteractable.getCenterX() - 4,
                     currentInteractable.getCenterY() + 30);
         }
+        
+        // prompt E for TMX tile interactables
+        if (currentTileInteractable != null) {
+            font.draw(batch,
+                    "E",
+                    currentTileInteractable.getCenterX() - 4,
+                    currentTileInteractable.getCenterY() + 30);
+        }
+        
+        // Floating message above player (e.g., "It's locked...")
+        if (floatingMessage != null && floatingMessageTimer > 0) {
+            font.draw(batch,
+                    floatingMessage,
+                    player.getCenterX() - floatingMessage.length() * 3,
+                    player.getY() + player.getRenderHeight() + 20);
+        }
 
         batch.end();
+
+        // 3.5) Render TMX layers ABOVE player (bottom wall, bottom door)
+        // This makes the player appear behind the lower wall
+        if (tiledMapManager.hasCurrentMap()) {
+            tiledMapManager.renderAbovePlayer(worldCamera);
+        }
 
         // 4) Fog of War - Render to darkness buffer, then composite
         renderDarknessLayer();
@@ -498,6 +546,14 @@ public class PlayScreen implements Screen {
             transitionCooldown -= delta;
             if (transitionCooldown < 0)
                 transitionCooldown = 0;
+        }
+        
+        // Update floating message timer
+        if (floatingMessageTimer > 0) {
+            floatingMessageTimer -= delta;
+            if (floatingMessageTimer <= 0) {
+                floatingMessage = null;
+            }
         }
 
         handleInput(delta);
@@ -651,16 +707,15 @@ public class PlayScreen implements Screen {
         // GUNAKAN FOOT HITBOX (bukan body bounds!)
         com.badlogic.gdx.math.Rectangle footBounds = p.getFootBounds();
 
-        // Check tables - full rectangle furniture
-        for (Table t : currentRoom.getTables()) {
-            if (footBounds.overlaps(t.getCollisionBounds()))
+        // Check TMX tile collision (if map is loaded for this room)
+        if (tiledMapManager.hasCurrentMap()) {
+            if (!tiledMapManager.isAreaWalkable(
+                    footBounds.x, footBounds.y, 
+                    footBounds.width, footBounds.height)) {
                 return true;
+            }
         }
-        // Check lockers - full rectangle furniture
-        for (Locker l : currentRoom.getLockers()) {
-            if (footBounds.overlaps(l.getCollisionBounds()))
-                return true;
-        }
+
         return false;
     }
 
@@ -686,89 +741,200 @@ public class PlayScreen implements Screen {
         float ey = enemy.getY();
         float ew = enemy.getWidth();
         float eh = enemy.getHeight();
+        
+        // Use room-specific dimensions
+        float roomW = getRoomWidth();
+        float roomH = getRoomHeight();
 
-        // Clamp ke dalam ruangan (dengan wall thickness)
-        if (ex < WALL_THICKNESS) {
-            enemy.setX(WALL_THICKNESS);
+        // If TMX map is loaded, use tile-based collision bounds
+        if (tiledMapManager.hasCurrentMap()) {
+            com.badlogic.gdx.math.Rectangle walkable = tiledMapManager.getWalkableBounds();
+            if (walkable != null) {
+                // Clamp to walkable bounds
+                if (ex < walkable.x) {
+                    enemy.setX(walkable.x);
+                }
+                if (ex + ew > walkable.x + walkable.width) {
+                    enemy.setX(walkable.x + walkable.width - ew);
+                }
+                if (ey < walkable.y) {
+                    enemy.setY(walkable.y);
+                }
+                if (ey + eh > walkable.y + walkable.height) {
+                    enemy.setY(walkable.y + walkable.height - eh);
+                }
+                return;
+            }
         }
-        if (ex + ew > VIRTUAL_WIDTH - WALL_THICKNESS) {
-            enemy.setX(VIRTUAL_WIDTH - ew - WALL_THICKNESS);
+
+        // Fallback: Clamp ke dalam ruangan (dengan room border)
+        if (ex < ROOM_BORDER) {
+            enemy.setX(ROOM_BORDER);
         }
-        if (ey < WALL_THICKNESS) {
-            enemy.setY(WALL_THICKNESS);
+        if (ex + ew > roomW - ROOM_BORDER) {
+            enemy.setX(roomW - ew - ROOM_BORDER);
         }
-        if (ey + eh > VIRTUAL_HEIGHT - WALL_THICKNESS) {
-            enemy.setY(VIRTUAL_HEIGHT - eh - WALL_THICKNESS);
+        if (ey < ROOM_BORDER) {
+            enemy.setY(ROOM_BORDER);
+        }
+        if (ey + eh > roomH - ROOM_BORDER) {
+            enemy.setY(roomH - eh - ROOM_BORDER);
         }
     }
 
     private void checkRoomTransition() {
-
-        float cx = player.getCenterX();
-        float cy = player.getCenterY();
-
-        float doorMinX = VIRTUAL_WIDTH / 2f - DOOR_WIDTH / 2f;
-        float doorMaxX = VIRTUAL_WIDTH / 2f + DOOR_WIDTH / 2f;
-        float doorMinY = VIRTUAL_HEIGHT / 2f - DOOR_WIDTH / 2f;
-        float doorMaxY = VIRTUAL_HEIGHT / 2f + DOOR_WIDTH / 2f;
-
-        boolean moved = false;
-
-        // ATAS
-        if (player.getY() + player.getRenderHeight() >= VIRTUAL_HEIGHT - WALL_THICKNESS) {
-            RoomId up = currentRoomId.up();
-            if (up != null && cx >= doorMinX && cx <= doorMaxX) {
-                switchToRoom(up);
-                float newY = WALL_THICKNESS + ENTRY_OFFSET;
-                player.setY(newY);
-                moved = true;
-            } else {
-                player.setY(VIRTUAL_HEIGHT - player.getRenderHeight() - WALL_THICKNESS);
+        // === TMX DOOR TRANSITION ===
+        // Check if player is on a door object defined in the TMX map
+        if (tiledMapManager.hasCurrentMap()) {
+            com.badlogic.gdx.math.Rectangle footBounds = player.getFootBounds();
+            RoomId tmxDoorDestination = tiledMapManager.checkDoorTransition(
+                footBounds.x, footBounds.y, footBounds.width, footBounds.height);
+            
+            if (tmxDoorDestination != null && tmxDoorDestination != currentRoomId) {
+                // Check if destination room has a TMX map
+                if (!tiledMapManager.hasMapForRoom(tmxDoorDestination)) {
+                    // Room not implemented yet - show locked message
+                    showFloatingMessage("It's locked...");
+                    transitionCooldown = TRANSITION_COOLDOWN_DURATION;
+                    return;
+                }
+                
+                System.out.println("[PlayScreen] TMX Door transition: " + currentRoomId + " -> " + tmxDoorDestination);
+                
+                float roomW = getRoomWidth();
+                float roomH = getRoomHeight();
+                
+                // Get door info for positioning
+                com.fearjosh.frontend.render.TiledMapManager.DoorInfo doorInfo = 
+                    tiledMapManager.getDoorAt(footBounds.x, footBounds.y, footBounds.width, footBounds.height);
+                
+                // Determine which wall the door is on (for spawn positioning in new room)
+                String doorWall = determineDoorWall(doorInfo, roomW, roomH);
+                System.out.println("[PlayScreen] Door wall: " + doorWall);
+                
+                // Remember which room we came from
+                RoomId previousRoom = currentRoomId;
+                
+                switchToRoom(tmxDoorDestination);
+                
+                // Position player - first try TMX spawn point, then fallback to wall-based
+                positionPlayerForDoorEntry(doorWall, tmxDoorDestination, previousRoom);
+                transitionCooldown = TRANSITION_COOLDOWN_DURATION;
             }
         }
-
-        // BAWAH
-        if (!moved && player.getY() <= WALL_THICKNESS) {
-            RoomId down = currentRoomId.down();
-            if (down != null && cx >= doorMinX && cx <= doorMaxX) {
-                switchToRoom(down);
-                float newY = VIRTUAL_HEIGHT - WALL_THICKNESS - player.getRenderHeight() - ENTRY_OFFSET;
-                player.setY(newY);
-                moved = true;
-            } else {
-                player.setY(WALL_THICKNESS);
+    }
+    
+    /**
+     * Display a floating message above the player's head
+     */
+    private void showFloatingMessage(String message) {
+        this.floatingMessage = message;
+        this.floatingMessageTimer = FLOATING_MESSAGE_DURATION;
+    }
+    
+    /**
+     * Determine which wall a door is on based on its position
+     */
+    private String determineDoorWall(com.fearjosh.frontend.render.TiledMapManager.DoorInfo doorInfo, float roomW, float roomH) {
+        if (doorInfo == null) return "BOTTOM";
+        
+        com.badlogic.gdx.math.Rectangle bounds = doorInfo.bounds;
+        float centerX = bounds.x + bounds.width / 2f;
+        float centerY = bounds.y + bounds.height / 2f;
+        
+        // Check which wall the door is closest to
+        float distToTop = roomH - centerY;
+        float distToBottom = centerY;
+        float distToLeft = centerX;
+        float distToRight = roomW - centerX;
+        
+        float minDist = Math.min(Math.min(distToTop, distToBottom), Math.min(distToLeft, distToRight));
+        
+        if (minDist == distToTop) return "TOP";
+        if (minDist == distToBottom) return "BOTTOM";
+        if (minDist == distToLeft) return "LEFT";
+        return "RIGHT";
+    }
+    
+    /**
+     * Position player at the opposite side when entering through a TMX door
+     */
+    private void positionPlayerForDoorEntry(String exitedWall, RoomId newRoom, RoomId previousRoom) {
+        float roomW = getRoomWidth();
+        float roomH = getRoomHeight();
+        float playerW = player.getRenderWidth();
+        float playerH = player.getRenderHeight();
+        
+        // First, try to use TMX spawn point based on previous room
+        if (tiledMapManager.hasCurrentMap() && previousRoom != null) {
+            com.fearjosh.frontend.render.TiledMapManager.SpawnInfo spawn = tiledMapManager.getSpawnPoint(previousRoom);
+            if (spawn != null) {
+                System.out.println("[PlayScreen] Using TMX spawn point from " + previousRoom + " at (" + spawn.x + ", " + spawn.y + ")");
+                player.setX(spawn.x - playerW / 2f);
+                player.setY(spawn.y - playerH / 2f);
+                return;
             }
         }
-
-        // KANAN
-        if (!moved && player.getX() + player.getRenderWidth() >= VIRTUAL_WIDTH - WALL_THICKNESS) {
-            RoomId right = currentRoomId.right();
-            if (right != null && cy >= doorMinY && cy <= doorMaxY) {
-                switchToRoom(right);
-                float newX = WALL_THICKNESS + ENTRY_OFFSET;
-                player.setX(newX);
-                moved = true;
-            } else {
-                player.setX(VIRTUAL_WIDTH - player.getRenderWidth() - WALL_THICKNESS);
+        
+        // Fallback to wall-based positioning
+        // Get walkable bounds if TMX map is loaded
+        com.badlogic.gdx.math.Rectangle walkable = null;
+        if (tiledMapManager.hasCurrentMap()) {
+            walkable = tiledMapManager.getWalkableBounds();
+        }
+        
+        float spawnX = roomW / 2f - playerW / 2f;
+        float spawnY = roomH / 2f - playerH / 2f;
+        
+        if (walkable != null) {
+            // Position based on walkable area
+            switch (exitedWall) {
+                case "TOP":
+                    // Exited through TOP door, spawn at BOTTOM of new room
+                    spawnY = walkable.y + ENTRY_OFFSET;
+                    spawnX = walkable.x + walkable.width / 2f - playerW / 2f;
+                    break;
+                case "BOTTOM":
+                    // Exited through BOTTOM door, spawn at TOP of new room
+                    spawnY = walkable.y + walkable.height - playerH - ENTRY_OFFSET;
+                    spawnX = walkable.x + walkable.width / 2f - playerW / 2f;
+                    break;
+                case "LEFT":
+                    // Exited through LEFT door, spawn at RIGHT of new room
+                    spawnX = walkable.x + walkable.width - playerW - ENTRY_OFFSET;
+                    spawnY = walkable.y + walkable.height / 2f - playerH / 2f;
+                    break;
+                case "RIGHT":
+                    // Exited through RIGHT door, spawn at LEFT of new room
+                    spawnX = walkable.x + ENTRY_OFFSET;
+                    spawnY = walkable.y + walkable.height / 2f - playerH / 2f;
+                    break;
+            }
+        } else {
+            // Fallback positioning
+            switch (exitedWall) {
+                case "TOP":
+                    spawnY = ROOM_BORDER + ENTRY_OFFSET;
+                    break;
+                case "BOTTOM":
+                    spawnY = roomH - playerH - ROOM_BORDER - ENTRY_OFFSET;
+                    break;
+                case "LEFT":
+                    spawnX = roomW - playerW - ROOM_BORDER - ENTRY_OFFSET;
+                    break;
+                case "RIGHT":
+                    spawnX = ROOM_BORDER + ENTRY_OFFSET;
+                    break;
             }
         }
-
-        // KIRI
-        if (!moved && player.getX() <= WALL_THICKNESS) {
-            RoomId left = currentRoomId.left();
-            if (left != null && cy >= doorMinY && cy <= doorMaxY) {
-                switchToRoom(left);
-                float newX = VIRTUAL_WIDTH - WALL_THICKNESS - player.getRenderWidth() - ENTRY_OFFSET;
-                player.setX(newX);
-                moved = true;
-            } else {
-                player.setX(WALL_THICKNESS);
-            }
-        }
-
-        if (moved) {
-            transitionCooldown = TRANSITION_COOLDOWN_DURATION;
-        }
+        
+        player.setX(spawnX);
+        player.setY(spawnY);
+    }
+    
+    // Overload for legacy calls without previousRoom
+    private void positionPlayerForDoorEntry(String exitedWall, RoomId newRoom) {
+        positionPlayerForDoorEntry(exitedWall, newRoom, null);
     }
 
     private void updateBattery(float delta) {
@@ -855,6 +1021,7 @@ public class PlayScreen implements Screen {
 
     private void findCurrentInteractable() {
         currentInteractable = null;
+        currentTileInteractable = null;
         float bestDist2 = Float.MAX_VALUE;
 
         float px = player.getCenterX();
@@ -873,23 +1040,42 @@ public class PlayScreen implements Screen {
                 currentInteractable = inter;
             }
         }
-
-        for (Locker locker : currentRoom.getLockers()) {
-            if (!locker.isActive() || !locker.canInteract(player))
-                continue;
-
-            float dx = locker.getCenterX() - px;
-            float dy = locker.getCenterY() - py;
-            float dist2 = dx * dx + dy * dy;
-
-            if (dist2 < bestDist2) {
-                bestDist2 = dist2;
-                currentInteractable = locker;
+        
+        // Check TMX tile interactables (lockers from Tiled map)
+        if (tiledMapManager.hasCurrentMap()) {
+            com.fearjosh.frontend.render.TiledMapManager.TileInteractable tileInter = 
+                tiledMapManager.getTileInteractableAt(px, py, INTERACT_RANGE);
+            if (tileInter != null) {
+                float dx = tileInter.getCenterX() - px;
+                float dy = tileInter.getCenterY() - py;
+                float dist2 = dx * dx + dy * dy;
+                
+                if (dist2 < bestDist2) {
+                    bestDist2 = dist2;
+                    currentTileInteractable = tileInter;
+                    currentInteractable = null; // TMX interactable takes priority
+                }
             }
         }
     }
 
     private void handleInteractInput() {
+        // Handle TMX tile interactables (lockers from Tiled map)
+        if (currentTileInteractable != null && Gdx.input.isKeyJustPressed(Input.Keys.E)) {
+            System.out.println("[Interact] Interacting with TMX tile: " + currentTileInteractable.type + 
+                " (" + currentTileInteractable.name + ")");
+            
+            boolean success = tiledMapManager.toggleTileInteractable(currentTileInteractable);
+            if (success) {
+                System.out.println("[Interact] Tile toggled to: " + 
+                    (currentTileInteractable.isOpen ? "OPEN" : "CLOSED"));
+                // You can add sound effects, item drops, etc. here based on type
+                // if (currentTileInteractable.type.equals("locker")) { ... }
+            }
+            return;
+        }
+        
+        // Handle legacy interactables
         if (currentInteractable != null &&
                 currentInteractable.isActive() &&
                 Gdx.input.isKeyJustPressed(Input.Keys.E)) {
@@ -926,155 +1112,15 @@ public class PlayScreen implements Screen {
     }
 
     // ======================
-    // WALLS
-    // ======================
-
-    private void drawWalls() {
-        shapeRenderer.setColor(0.4f, 0.4f, 0.4f, 1);
-
-        float doorMinX = VIRTUAL_WIDTH / 2f - DOOR_WIDTH / 2f;
-        float doorMaxX = VIRTUAL_WIDTH / 2f + DOOR_WIDTH / 2f;
-        float doorMinY = VIRTUAL_HEIGHT / 2f - DOOR_WIDTH / 2f;
-        float doorMaxY = VIRTUAL_HEIGHT / 2f + DOOR_WIDTH / 2f;
-
-        // Top
-        if (currentRoomId.hasUp()) {
-            shapeRenderer.rect(0, VIRTUAL_HEIGHT - WALL_THICKNESS,
-                    doorMinX, WALL_THICKNESS);
-            shapeRenderer.rect(doorMaxX, VIRTUAL_HEIGHT - WALL_THICKNESS,
-                    VIRTUAL_WIDTH - doorMaxX, WALL_THICKNESS);
-        } else {
-            shapeRenderer.rect(0, VIRTUAL_HEIGHT - WALL_THICKNESS,
-                    VIRTUAL_WIDTH, WALL_THICKNESS);
-        }
-
-        // Bottom
-        if (currentRoomId.hasDown()) {
-            shapeRenderer.rect(0, 0, doorMinX, WALL_THICKNESS);
-            shapeRenderer.rect(doorMaxX, 0,
-                    VIRTUAL_WIDTH - doorMaxX, WALL_THICKNESS);
-        } else {
-            shapeRenderer.rect(0, 0, VIRTUAL_WIDTH, WALL_THICKNESS);
-        }
-
-        // Left
-        if (currentRoomId.hasLeft()) {
-            shapeRenderer.rect(0, 0, WALL_THICKNESS, doorMinY);
-            shapeRenderer.rect(0, doorMaxY,
-                    WALL_THICKNESS, VIRTUAL_HEIGHT - doorMaxY);
-        } else {
-            shapeRenderer.rect(0, 0, WALL_THICKNESS, VIRTUAL_HEIGHT);
-        }
-
-        // Right
-        if (currentRoomId.hasRight()) {
-            shapeRenderer.rect(VIRTUAL_WIDTH - WALL_THICKNESS, 0,
-                    WALL_THICKNESS, doorMinY);
-            shapeRenderer.rect(VIRTUAL_WIDTH - WALL_THICKNESS, doorMaxY,
-                    WALL_THICKNESS, VIRTUAL_HEIGHT - doorMaxY);
-        } else {
-            shapeRenderer.rect(VIRTUAL_WIDTH - WALL_THICKNESS, 0,
-                    WALL_THICKNESS, VIRTUAL_HEIGHT);
-        }
-    }
-
-    // ======================
-    // FLOOR HELPERS
-    // ======================
-
-    // Memecah 1 texture 4x4 jadi array 16 tile
-    private TextureRegion[] splitFloorTiles(Texture tex) {
-        int COLS = 4;
-        int ROWS = 4;
-
-        TextureRegion[][] tmp = TextureRegion.split(
-                tex,
-                tex.getWidth() / COLS,
-                tex.getHeight() / ROWS);
-
-        TextureRegion[] flat = new TextureRegion[COLS * ROWS];
-        int idx = 0;
-        for (int r = 0; r < ROWS; r++) {
-            for (int c = 0; c < COLS; c++) {
-                flat[idx++] = tmp[r][c];
-            }
-        }
-        return flat;
-    }
-
-    // Ambil / generate grid lantai untuk room saat ini
-    private TextureRegion[][] getFloorForCurrentRoom() {
-        TextureRegion[][] grid = roomFloors.get(currentRoomId);
-        if (grid == null) {
-            grid = generateFloorForRoom(currentRoomId);
-            roomFloors.put(currentRoomId, grid);
-        }
-        return grid;
-    }
-
-    private TextureRegion[][] generateFloorForRoom(RoomId id) {
-        TextureRegion[] pool;
-
-        // pilih salah satu tileset sebagai "tema" room ini
-        int choice = rng.nextInt(3);
-        switch (choice) {
-            default:
-            case 0:
-                pool = floorTiles1;
-                break;
-            case 1:
-                pool = floorTiles2;
-                break;
-            case 2:
-                pool = floorTiles3;
-                break;
-        }
-
-        TextureRegion[][] grid = new TextureRegion[FLOOR_ROWS][FLOOR_COLS];
-
-        // supaya pattern konsisten tiap kali balik ke room yang sama, seed based on
-        // RoomId
-        long seed = id.ordinal() * 99991L + 12345L;
-        Random r = new Random(seed);
-
-        for (int row = 0; row < FLOOR_ROWS; row++) {
-            for (int col = 0; col < FLOOR_COLS; col++) {
-                grid[row][col] = pool[r.nextInt(pool.length)];
-            }
-        }
-        return grid;
-    }
-
-    private void drawFloor() {
-        TextureRegion[][] grid = getFloorForCurrentRoom();
-
-        float tileW = FLOOR_TILE_SIZE;
-        float tileH = FLOOR_TILE_SIZE;
-
-        // gelapkan semua lantai → ambience ruangannya gelap
-        Color oldColor = batch.getColor();
-        batch.setColor(0.35f, 0.35f, 0.35f, 1f);
-
-        for (int row = 0; row < FLOOR_ROWS; row++) {
-            for (int col = 0; col < FLOOR_COLS; col++) {
-                TextureRegion region = grid[row][col];
-                if (region == null)
-                    continue;
-
-                float x = col * tileW;
-                float y = row * tileH;
-                batch.draw(region, x, y, tileW, tileH);
-            }
-        }
-
-        batch.setColor(oldColor);
-    }
-
-    // ======================
     // FOG OF WAR
     // ======================
 
     private void renderDarknessLayer() {
+        // Skip fog of war for LOBBY - it's well lit
+        if (currentRoomId == RoomId.LOBBY) {
+            return;
+        }
+        
         com.fearjosh.frontend.difficulty.DifficultyStrategy ds = com.fearjosh.frontend.core.GameManager.getInstance()
                 .getDifficultyStrategy();
         float visionRadius = ds.visionRadius();
@@ -1352,12 +1398,7 @@ public class PlayScreen implements Screen {
         font.dispose();
         playerTexture.dispose();
 
-        floorTex1.dispose();
-        floorTex2.dispose();
-        floorTex3.dispose();
-
         vignetteTexture.dispose();
-        Table.disposeTexture();
         lightTexture.dispose();
         darknessFrameBuffer.dispose();
 
@@ -1369,6 +1410,9 @@ public class PlayScreen implements Screen {
         }
         if (inventorySlotSelectedTexture != null) {
             inventorySlotSelectedTexture.dispose();
+        }
+        if (tiledMapManager != null) {
+            tiledMapManager.dispose();
         }
     }
 

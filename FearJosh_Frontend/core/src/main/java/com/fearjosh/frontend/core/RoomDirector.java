@@ -261,27 +261,19 @@ public class RoomDirector {
     }
     
     /**
-     * Get row index (0-2) from RoomId
+     * Get row index from RoomId
+     * Now uses RoomId's built-in getRow() method
      */
     private int getRow(RoomId room) {
-        switch (room) {
-            case R1: case R2: case R3: return 0;
-            case R4: case R5: case R6: return 1;
-            case R7: case R8: case R9: return 2;
-            default: return 1; // Center fallback
-        }
+        return room != null ? room.getRow() : 2; // Default to middle row
     }
     
     /**
-     * Get column index (0-2) from RoomId
+     * Get column index from RoomId
+     * Now uses RoomId's built-in getCol() method
      */
     private int getCol(RoomId room) {
-        switch (room) {
-            case R1: case R4: case R7: return 0;
-            case R2: case R5: case R8: return 1;
-            case R3: case R6: case R9: return 2;
-            default: return 1; // Center fallback
-        }
+        return room != null ? room.getCol() : 3; // Default to entrance column
     }
     
     /**
