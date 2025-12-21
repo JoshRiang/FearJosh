@@ -191,11 +191,13 @@ public class MainMenuScreen implements Screen {
                 GameManager.getInstance().startNewGame(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
                 GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
 
-                // Play tutorial cutscene before starting game
+                // Show black screen for 1 second before cutscene
                 Screen playScreen = new PlayScreen(game);
-                CutsceneManager.getInstance().playCutscene(game, "tutorial", playScreen);
+                Screen cutsceneScreen = CutsceneManager.getInstance().createCutsceneScreen(game, "0_1", playScreen);
+                Screen blackTransition = new BlackTransitionScreen(game, cutsceneScreen, 4.0f);
+                game.setScreen(blackTransition);
 
-                System.out.println("[MainMenu] NEW GAME clicked - playing cutscene then starting game");
+                System.out.println("[MainMenu] NEW GAME clicked - black transition -> cutscene -> game");
             }
         });
 

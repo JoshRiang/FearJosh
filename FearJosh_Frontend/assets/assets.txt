@@ -1,6 +1,9 @@
+Audio/Effect/typing_sound_effect.wav
 Audio/Music/main_menu_music.wav
+Audio/Music/sad_cutscene_piano_violin.wav
 Audio/background_menu.wav
-Cutscene/0/erasebg-transformed.png
+Cutscene/0/0_1.jpg
+Cutscene/0/0_2.png
 General/vignette.png
 General/white.png
 Items/battery.png

@@ -99,6 +99,15 @@ public class AudioManager {
     }
 
     /**
+     * Get the path of currently playing music
+     * 
+     * @return Current music path, or null if no music is playing
+     */
+    public String getCurrentMusicPath() {
+        return currentMusicPath;
+    }
+
+    /**
      * Pause current music
      */
     public void pauseMusic() {

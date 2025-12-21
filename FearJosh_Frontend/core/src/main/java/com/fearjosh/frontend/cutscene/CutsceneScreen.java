@@ -3,6 +3,7 @@ package com.fearjosh.frontend.cutscene;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
@@ -66,6 +67,25 @@ public class CutsceneScreen implements Screen {
     private float timeSinceLastAdvance;
     private static final float ADVANCE_COOLDOWN = 0.2f;
 
+    // Typing animation
+    private static final float TYPING_SPEED = 15f; // Characters per second
+    private float typingTimer;
+    private int visibleCharacters;
+    private boolean typingComplete;
+    private Sound typingSound;
+    private long typingSoundId; // Track sound instance for stopping
+
+    // Fade transitions
+    private enum FadeState {
+        FADE_IN, NONE, FADE_OUT
+    }
+
+    private FadeState fadeState;
+    private float fadeTimer;
+    private float fadeAlpha; // 0 = transparent, 1 = black
+    private float fadeInDuration; // From cutsceneData
+    private float fadeOutDuration; // From cutsceneData
+
     /**
      * Create a cutscene screen.
      * 
@@ -82,6 +102,27 @@ public class CutsceneScreen implements Screen {
         this.canAdvance = false;
         this.timeSinceLastAdvance = 0f;
         this.layerStates = new Array<>();
+
+        // Initialize typing animation
+        this.typingTimer = 0f;
+        this.visibleCharacters = 0;
+        this.typingComplete = false;
+        this.typingSoundId = -1;
+
+        // Initialize fade transition from cutsceneData
+        this.fadeInDuration = cutsceneData.getFadeInDuration();
+        this.fadeOutDuration = cutsceneData.getFadeOutDuration();
+        this.fadeState = (fadeInDuration > 0) ? FadeState.FADE_IN : FadeState.NONE;
+        this.fadeTimer = 0f;
+        this.fadeAlpha = (fadeInDuration > 0) ? 1.0f : 0f; // Start fully black if fade in enabled
+
+        // Load typing sound effect
+        try {
+            this.typingSound = Gdx.audio.newSound(Gdx.files.internal("Audio/Effect/typing_sound_effect.wav"));
+        } catch (Exception e) {
+            System.err.println("[Cutscene] Failed to load typing sound: " + e.getMessage());
+            this.typingSound = null;
+        }
 
         camera = new OrthographicCamera();
         viewport = new FitViewport(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, camera);
@@ -102,8 +143,9 @@ public class CutsceneScreen implements Screen {
             for (CutsceneLayer layer : cutsceneData.getLayers()) {
                 try {
                     Texture texture = new Texture(layer.getImagePath());
-                    float startX = layer.getStartX() * VIRTUAL_WIDTH;
-                    float startY = layer.getStartY() * (VIRTUAL_HEIGHT - DIALOG_BOX_HEIGHT);
+                    // Store position as offset from center (can be negative)
+                    float startX = layer.getStartX();
+                    float startY = layer.getStartY();
                     LayerState state = new LayerState(texture, startX, startY, layer.getStartScale());
                     layerStates.add(state);
                     System.out.println("[Cutscene] Loaded layer: " + layer.getImagePath());
@@ -121,12 +163,29 @@ public class CutsceneScreen implements Screen {
             }
         }
 
-        // Stop any background music that is currently playing
-        AudioManager.getInstance().stopMusic();
-
-        // Start cutscene music if available
+        // Smart music handling:
+        // - If cutscene has music, play it (stop previous if different)
+        // - If cutscene has no music, continue playing previous music
         if (cutsceneData.hasMusic()) {
-            AudioManager.getInstance().playMusic(cutsceneData.getMusicPath(), true);
+            String newMusicPath = cutsceneData.getMusicPath();
+            String currentMusicPath = AudioManager.getInstance().getCurrentMusicPath();
+
+            // Only change music if it's different from what's playing
+            if (!newMusicPath.equals(currentMusicPath)) {
+                AudioManager.getInstance().stopMusic();
+                AudioManager.getInstance().playMusic(newMusicPath, true);
+                System.out.println("[Cutscene] Playing new music: " + newMusicPath);
+            } else {
+                System.out.println("[Cutscene] Continuing same music: " + newMusicPath);
+            }
+        } else {
+            // No music specified - continue previous music if any
+            String currentMusicPath = AudioManager.getInstance().getCurrentMusicPath();
+            if (currentMusicPath != null) {
+                System.out.println("[Cutscene] Continuing previous music: " + currentMusicPath);
+            } else {
+                System.out.println("[Cutscene] No music playing");
+            }
         }
 
         System.out.println("[Cutscene] Started: " + cutsceneData.getCutsceneId());
@@ -141,15 +200,73 @@ public class CutsceneScreen implements Screen {
 
     @Override
     public void render(float delta) {
+        // Update fade transition
+        if (fadeState == FadeState.FADE_IN && fadeInDuration > 0) {
+            fadeTimer += delta;
+            fadeAlpha = Math.max(0f, 1f - (fadeTimer / fadeInDuration));
+            if (fadeTimer >= fadeInDuration) {
+                fadeState = FadeState.NONE;
+                fadeAlpha = 0f;
+            }
+        } else if (fadeState == FadeState.FADE_OUT && fadeOutDuration > 0) {
+            fadeTimer += delta;
+            fadeAlpha = Math.min(1f, fadeTimer / fadeOutDuration);
+            if (fadeTimer >= fadeOutDuration) {
+                // Fade out complete - transition to next screen
+                actualEndCutscene();
+                return;
+            }
+        }
+
         // Update cooldown timer
         timeSinceLastAdvance += delta;
         if (timeSinceLastAdvance >= ADVANCE_COOLDOWN) {
             canAdvance = true;
         }
 
+        // Update typing animation
+        if (!typingComplete) {
+            typingTimer += delta;
+            CutsceneDialog currentDialog = cutsceneData.getDialog(currentDialogIndex);
+            if (currentDialog != null) {
+                String fullText = currentDialog.getDialogText();
+                int targetChars = (int) (typingTimer * TYPING_SPEED);
+                visibleCharacters = Math.min(targetChars, fullText.length());
+
+                // Start looping typing sound when dialog starts
+                if (typingSoundId == -1 && typingSound != null && visibleCharacters > 0) {
+                    typingSoundId = typingSound.loop(0.5f); // Loop at 50% volume
+                }
+
+                if (visibleCharacters >= fullText.length()) {
+                    typingComplete = true;
+                    // Stop typing sound when complete
+                    if (typingSoundId != -1 && typingSound != null) {
+                        typingSound.stop(typingSoundId);
+                        typingSoundId = -1;
+                    }
+                }
+            }
+        }
+
         // Handle input - SPACE to advance
         if (canAdvance && Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-            advanceDialog();
+            if (!typingComplete) {
+                // Skip typing animation
+                CutsceneDialog currentDialog = cutsceneData.getDialog(currentDialogIndex);
+                if (currentDialog != null) {
+                    visibleCharacters = currentDialog.getDialogText().length();
+                    typingComplete = true;
+                    // Stop typing sound when skipping
+                    if (typingSoundId != -1 && typingSound != null) {
+                        typingSound.stop(typingSoundId);
+                        typingSoundId = -1;
+                    }
+                }
+            } else {
+                // Advance to next dialog
+                advanceDialog();
+            }
         }
 
         // Clear screen
@@ -177,6 +294,11 @@ public class CutsceneScreen implements Screen {
 
         // Render current dialog text
         renderDialogText();
+
+        // Render fade overlay
+        if (fadeAlpha > 0f) {
+            renderFadeOverlay();
+        }
     }
 
     private void renderAnimatedLayers(float delta) {
@@ -228,11 +350,14 @@ public class CutsceneScreen implements Screen {
             float layerWidth = state.texture.getWidth() * drawScale;
             float layerHeight = state.texture.getHeight() * drawScale;
 
-            // Center the image if no specific position was set
-            if (layer.getStartX() == 0f && layer.getStartY() == 0f) {
-                drawX = (VIRTUAL_WIDTH - layerWidth) / 2;
-                drawY = DIALOG_BOX_HEIGHT + (contentHeight - layerHeight) / 2;
-            }
+            // Always center-based: position is offset from center in pixels
+            // Start from center of screen
+            float centerX = VIRTUAL_WIDTH / 2;
+            float centerY = DIALOG_BOX_HEIGHT + (contentHeight / 2);
+
+            // Apply offset (can be negative for left/down)
+            drawX = centerX + state.currentX - (layerWidth / 2);
+            drawY = centerY + state.currentY - (layerHeight / 2);
 
             batch.draw(state.texture, drawX, drawY, layerWidth, layerHeight);
         }
@@ -285,13 +410,18 @@ public class CutsceneScreen implements Screen {
             textY -= 30f; // Move down for dialog text
         }
 
-        // Draw dialog text with word wrapping
-        font.draw(batch, currentDialog.getDialogText(),
+        // Draw dialog text with typing animation
+        String fullText = currentDialog.getDialogText();
+        String displayText = fullText.substring(0, Math.min(visibleCharacters, fullText.length()));
+        font.draw(batch, displayText,
                 textX, textY, textWidth, Align.left, true);
 
         // Draw progress indicator (e.g., "Press SPACE to continue" or "3/10")
         String progressText;
-        if (currentDialogIndex < cutsceneData.getDialogCount() - 1) {
+        if (!typingComplete) {
+            progressText = "Press SPACE to skip... (" +
+                    (currentDialogIndex + 1) + "/" + cutsceneData.getDialogCount() + ")";
+        } else if (currentDialogIndex < cutsceneData.getDialogCount() - 1) {
             progressText = "Press SPACE to continue... (" +
                     (currentDialogIndex + 1) + "/" + cutsceneData.getDialogCount() + ")";
         } else {
@@ -309,10 +439,33 @@ public class CutsceneScreen implements Screen {
         batch.end();
     }
 
+    private void renderFadeOverlay() {
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0f, 0f, 0f, fadeAlpha);
+        shapeRenderer.rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        shapeRenderer.end();
+
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+
+        // Debug: show current fade state
+        if (fadeAlpha > 0.01f) {
+            System.out.println("[Fade] State: " + fadeState + ", Alpha: " + fadeAlpha);
+        }
+    }
+
     private void advanceDialog() {
         currentDialogIndex++;
         canAdvance = false;
         timeSinceLastAdvance = 0f;
+
+        // Reset typing animation for next dialog
+        typingTimer = 0f;
+        visibleCharacters = 0;
+        typingComplete = false;
+        typingSoundId = -1;
 
         if (currentDialogIndex >= cutsceneData.getDialogCount()) {
             // Cutscene finished
@@ -326,6 +479,17 @@ public class CutsceneScreen implements Screen {
     private void endCutscene() {
         System.out.println("[Cutscene] Finished: " + cutsceneData.getCutsceneId());
 
+        // Start fade out transition if enabled
+        if (fadeOutDuration > 0) {
+            fadeState = FadeState.FADE_OUT;
+            fadeTimer = 0f;
+        } else {
+            // No fade out - end immediately
+            actualEndCutscene();
+        }
+    }
+
+    private void actualEndCutscene() {
         // Stop music if it was playing
         if (cutsceneData.hasMusic()) {
             AudioManager.getInstance().stopMusic();
@@ -373,5 +537,8 @@ public class CutsceneScreen implements Screen {
         shapeRenderer.dispose();
         font.dispose();
         speakerFont.dispose();
+        if (typingSound != null) {
+            typingSound.dispose();
+        }
     }
 }

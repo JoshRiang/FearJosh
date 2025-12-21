@@ -3,6 +3,7 @@ package com.fearjosh.frontend.cutscene;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.fearjosh.frontend.FearJosh;
+import com.fearjosh.frontend.cutscene.cutscene_datas.nol.nol;
 
 /**
  * Manager for cutscenes. Stores all cutscene data and provides methods to play
@@ -126,6 +127,9 @@ public class CutsceneManager {
 
         cutscenes.put("first_encounter", encounterCutscene);
 
+        // Register custom cutscene data dari folder cutscene_datas
+        nol.registerCutscenes(this);
+
         System.out.println("[CutsceneManager] Initialized " + cutscenes.size + " cutscenes");
     }
 
@@ -168,6 +172,25 @@ public class CutsceneManager {
         System.out.println("[CutsceneManager] Playing cutscene: " + cutsceneId);
         game.setScreen(new CutsceneScreen(game, data, nextScreen));
         return true;
+    }
+
+    /**
+     * Create a cutscene screen without immediately setting it.
+     * Useful for chaining transitions.
+     * 
+     * @param game       The main game instance
+     * @param cutsceneId The cutscene ID to create
+     * @param nextScreen The screen to show after cutscene ends
+     * @return CutsceneScreen instance, or null if cutscene not found
+     */
+    public Screen createCutsceneScreen(FearJosh game, String cutsceneId, Screen nextScreen) {
+        CutsceneData data = cutscenes.get(cutsceneId);
+        if (data == null) {
+            System.err.println("[CutsceneManager] Cutscene not found: " + cutsceneId);
+            return null;
+        }
+
+        return new CutsceneScreen(game, data, nextScreen);
     }
 
     /**

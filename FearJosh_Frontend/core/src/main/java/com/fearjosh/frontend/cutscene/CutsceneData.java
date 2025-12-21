@@ -23,6 +23,8 @@ public class CutsceneData {
     private final String musicPath; // Path to background music (optional)
     private final Array<CutsceneDialog> dialogs;
     private final Array<CutsceneLayer> layers; // Multiple image layers with animations
+    private final float fadeInDuration; // Duration for fade in effect (0 = no fade)
+    private final float fadeOutDuration; // Duration for fade out effect (0 = no fade)
 
     /**
      * Builder pattern for creating CutsceneData with various configurations.
@@ -34,6 +36,8 @@ public class CutsceneData {
         private String musicPath = null;
         private Array<CutsceneDialog> dialogs = new Array<>();
         private Array<CutsceneLayer> layers = new Array<>();
+        private float fadeInDuration = 0f; // Default: no fade
+        private float fadeOutDuration = 0f; // Default: no fade
 
         public Builder(String cutsceneId) {
             this.cutsceneId = cutsceneId;
@@ -73,6 +77,26 @@ public class CutsceneData {
          */
         public Builder withMusic(String musicPath) {
             this.musicPath = musicPath;
+            return this;
+        }
+
+        /**
+         * Set fade in duration in seconds.
+         * 
+         * @param duration Duration in seconds (0 = no fade)
+         */
+        public Builder withFadeIn(float duration) {
+            this.fadeInDuration = duration;
+            return this;
+        }
+
+        /**
+         * Set fade out duration in seconds.
+         * 
+         * @param duration Duration in seconds (0 = no fade)
+         */
+        public Builder withFadeOut(float duration) {
+            this.fadeOutDuration = duration;
             return this;
         }
 
@@ -123,6 +147,8 @@ public class CutsceneData {
         this.musicPath = builder.musicPath;
         this.dialogs = builder.dialogs;
         this.layers = builder.layers;
+        this.fadeInDuration = builder.fadeInDuration;
+        this.fadeOutDuration = builder.fadeOutDuration;
     }
 
     public String getCutsceneId() {
@@ -170,5 +196,13 @@ public class CutsceneData {
 
     public boolean hasLayers() {
         return layers != null && layers.size > 0;
+    }
+
+    public float getFadeInDuration() {
+        return fadeInDuration;
+    }
+
+    public float getFadeOutDuration() {
+        return fadeOutDuration;
     }
 }

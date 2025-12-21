@@ -24,6 +24,8 @@ CutsceneData myCutscene = new CutsceneData.Builder("my_cutscene")
         .duration(10.0f)
         .build())
     .withMusic("Audio/Music/my_music.wav")
+    .withFadeIn(1.5f)   // Optional: fade in 1.5 seconds
+    .withFadeOut(1.0f)  // Optional: fade out 1.0 seconds
     .addDialog("Speaker", "Dialog text here...")
     .addDialog("Another dialog without speaker")
     .build();
@@ -53,13 +55,21 @@ CutsceneManager.getInstance().playCutscene(game, "my_cutscene", nextScreen);
 
 ## 📐 Layer Configuration
 
-### Position
+### Position (Center Anchor with Pixel Offset)
 ```java
-.position(0.5f, 0.5f)  // Center screen (0-1 range)
+// No position = auto-center
+// With position = offset dari center dalam pixels
+.position(0, 0)      // Center screen
+.position(100, 0)    // 100px right from center
+.position(-50, 30)   // 50px left, 30px up from center
+.position(0, -40)    // 40px down from center
 ```
-- `0, 0` = Bottom-left
-- `1, 1` = Top-right
-- `0.5, 0.5` = Center
+- **Anchor point**: Tengah gambar (center)
+- **X positif** = geser ke kanan
+- **X negatif** = geser ke kiri
+- **Y positif** = geser ke atas
+- **Y negatif** = geser ke bawah
+- **Tanpa position()** = auto-center sempurna
 
 ### Scale
 ```java
@@ -90,6 +100,16 @@ CutsceneManager.getInstance().playCutscene(game, "my_cutscene", nextScreen);
 .duration(10.0f)  // 10 seconds
 ```
 - Durasi dalam detik (seconds)
+
+### Fade Transitions (Optional)
+```java
+.withFadeIn(1.5f)   // Fade in dari hitam (1.5 detik)
+.withFadeOut(1.0f)  // Fade out ke hitam (1.0 detik)
+```
+- **Fade In**: Cutscene mulai dari layar hitam, perlahan muncul
+- **Fade Out**: Cutscene berakhir dengan fade ke hitam
+- **Default**: Tanpa fade (0 = no fade)
+- **Per-cutscene**: Setiap cutscene bisa punya durasi fade berbeda
 
 ---
 
@@ -124,23 +144,25 @@ CutsceneData dramatic = new CutsceneData.Builder("dramatic")
 ### Example 3: Multiple Layers (Parallax Effect)
 ```java
 CutsceneData multilayer = new CutsceneData.Builder("multilayer")
-    // Background - slow pan
+    // Background - slow pan (auto-centered)
     .addLayer(new CutsceneLayer.Builder("Cutscenes/bg.png")
         .pan(CutsceneAnimationType.PAN_RIGHT, 80f)
         .duration(15.0f)
         .build())
-    // Middle layer - zoom
+    // Middle layer - zoom (offset 50px left, 20px down)
     .addLayer(new CutsceneLayer.Builder("Cutscenes/middle.png")
-        .position(0.2f, 0.3f)
+        .position(-50, -20)
         .zoom(CutsceneAnimationType.ZOOM_IN, 0.3f)
         .duration(15.0f)
         .build())
-    // Foreground - fast pan (parallax!)
+    // Foreground - fast pan (offset 100px right)
     .addLayer(new CutsceneLayer.Builder("Cutscenes/fg.png")
-        .position(0.7f, 0.2f)
+        .position(100, 0)
         .pan(CutsceneAnimationType.PAN_LEFT, 150f)
         .duration(15.0f)
         .build())
+    .withFadeIn(1.0f)
+    .withFadeOut(1.0f)
     .addDialog("The shadows move around you...")
     .build();
 ```
@@ -226,8 +248,19 @@ game.setScreen(new CutsceneScreen(game, dynamic, this));
 
 ## 🎯 Controls
 
-- **SPACE** - Advance to next dialog
+- **SPACE** - Skip typing animation / Advance to next dialog
 - **0.2s cooldown** - Prevents accidental skipping
+
+### Typing Animation
+- Dialog text muncul **character by character** (typing effect)
+- Speed: **15 characters/second**
+- **Sound effect**: `Audio/Effect/typing_sound_effect.wav` (loop saat typing)
+- Press **SPACE** untuk skip animasi typing
+
+### Music Continuity
+- Music **tidak restart** jika cutscene berikutnya punya music yang sama
+- Music **tetap playing** jika cutscene berikutnya tidak specify music
+- Music **berhenti** hanya jika explicitly stopped atau diganti
 
 ---
 
@@ -238,6 +271,8 @@ game.setScreen(new CutsceneScreen(game, dynamic, this));
 new CutsceneData.Builder(String cutsceneId)
     .addLayer(CutsceneLayer)           // Add animated layer
     .withMusic(String musicPath)       // Add background music
+    .withFadeIn(float duration)        // Fade in from black (seconds)
+    .withFadeOut(float duration)       // Fade out to black (seconds)
     .addDialog(String text)            // Add dialog (no speaker)
     .addDialog(String speaker, String text)  // Add dialog with speaker
     .build()
@@ -246,7 +281,7 @@ new CutsceneData.Builder(String cutsceneId)
 ### CutsceneLayer.Builder
 ```java
 new CutsceneLayer.Builder(String imagePath)
-    .position(float x, float y)        // Set start position (0-1)
+    .position(float x, float y)        // Pixel offset from center (default: auto-center)
     .scale(float scale)                // Set start scale (1.0 = normal)
     .zoom(AnimationType, float amount) // Add zoom animation
     .pan(AnimationType, float amount)  // Add pan animation
@@ -272,6 +307,11 @@ CutsceneManager.getInstance()
 3. **Tension Build**: Kombinasikan slow zoom in + pan untuk efek menakutkan
 4. **File Size**: Compress images untuk load time lebih cepat
 5. **Testing**: Gunakan dialog-only cutscene untuk test flow tanpa gambar
+6. **Center Anchor**: Gambar otomatis centered, gunakan `.position()` untuk fine-tuning
+7. **Fade Transitions**: Gunakan fade in/out untuk transisi lebih smooth
+8. **Music Continuity**: Music otomatis continue antar cutscene jika tidak diubah
+9. **Typing Speed**: Adjust `TYPING_SPEED` di CutsceneScreen.java (default: 15 chars/sec)
+10. **Black Transition**: Gunakan BlackTransitionScreen untuk pause sebelum cutscene
 
 ---
 
@@ -305,8 +345,18 @@ assets/
 - Default: 5.0 seconds
 
 ### Layer tidak centered
-- Jika `position(0, 0)` tidak diset, akan auto-center
-- Gunakan `position()` untuk kontrol manual
+- **Tanpa `.position()`** = otomatis centered sempurna
+- **Dengan `.position(x, y)`** = offset dari center dalam pixels
+- Contoh: `.position(0, 0)` = center, `.position(50, 0)` = 50px ke kanan
+
+### Typing sound tidak muncul
+- Pastikan file ada: `assets/Audio/Effect/typing_sound_effect.wav`
+- Check console untuk error loading sound
+
+### Fade tidak terlihat
+- Pastikan durasi cukup: minimum 0.5 detik
+- Gunakan `.withFadeIn()` dan `.withFadeOut()` di Builder
+- Check fadeAlpha di console log saat debug
 
 ---
 
