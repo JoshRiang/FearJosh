@@ -37,6 +37,10 @@ Map/floor_tiles_2G.png
 Map/floor_tiles_3.png
 Map/floor_tiles_3G.png
 Sprite/Enemy/josh_caught.png
+Sprite/Enemy/josh_chasing_down.png
+Sprite/Enemy/josh_chasing_left.png
+Sprite/Enemy/josh_chasing_right.png
+Sprite/Enemy/josh_chasing_up.png
 Sprite/Enemy/josh_general_animation.png
 Sprite/Enemy/josh_idle_1.png
 Sprite/Enemy/josh_idle_2.png
