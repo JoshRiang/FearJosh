@@ -14,14 +14,15 @@ enum CutsceneContentType {
 /**
  * Contains all data for a single cutscene story.
  * A cutscene can have visual content (image/video), background music, and
- * multiple dialogs.
+ * multiple dialogs. Supports multiple layered images with animations.
  */
 public class CutsceneData {
     private final String cutsceneId;
     private final CutsceneContentType contentType;
-    private final String contentPath; // Path to image or video file
+    private final String contentPath; // Path to image or video file (legacy, for backward compatibility)
     private final String musicPath; // Path to background music (optional)
     private final Array<CutsceneDialog> dialogs;
+    private final Array<CutsceneLayer> layers; // Multiple image layers with animations
 
     /**
      * Builder pattern for creating CutsceneData with various configurations.
@@ -32,17 +33,20 @@ public class CutsceneData {
         private String contentPath = null;
         private String musicPath = null;
         private Array<CutsceneDialog> dialogs = new Array<>();
+        private Array<CutsceneLayer> layers = new Array<>();
 
         public Builder(String cutsceneId) {
             this.cutsceneId = cutsceneId;
         }
 
         /**
-         * Set image as visual content.
+         * Set image as visual content (legacy method, creates a single static layer).
          */
         public Builder withImage(String imagePath) {
             this.contentType = CutsceneContentType.IMAGE;
             this.contentPath = imagePath;
+            // Also add as a layer with no animation for backward compatibility
+            this.layers.add(new CutsceneLayer.Builder(imagePath).build());
             return this;
         }
 
@@ -52,6 +56,15 @@ public class CutsceneData {
         public Builder withVideo(String videoPath) {
             this.contentType = CutsceneContentType.VIDEO;
             this.contentPath = videoPath;
+            return this;
+        }
+
+        /**
+         * Add an animated image layer.
+         */
+        public Builder addLayer(CutsceneLayer layer) {
+            this.layers.add(layer);
+            this.contentType = CutsceneContentType.IMAGE;
             return this;
         }
 
@@ -109,6 +122,7 @@ public class CutsceneData {
         this.contentPath = builder.contentPath;
         this.musicPath = builder.musicPath;
         this.dialogs = builder.dialogs;
+        this.layers = builder.layers;
     }
 
     public String getCutsceneId() {
@@ -148,5 +162,13 @@ public class CutsceneData {
 
     public boolean hasMusic() {
         return musicPath != null && !musicPath.isEmpty();
+    }
+
+    public Array<CutsceneLayer> getLayers() {
+        return layers;
+    }
+
+    public boolean hasLayers() {
+        return layers != null && layers.size > 0;
     }
 }

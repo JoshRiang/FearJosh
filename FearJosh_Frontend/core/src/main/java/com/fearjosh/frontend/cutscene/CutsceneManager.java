@@ -26,14 +26,14 @@ public class CutsceneManager {
         return instance;
     }
 
-    /**
-     * Initialize all cutscenes in the game.
-     * Add your cutscenes here using the builder pattern.
-     */
     private void initializeCutscenes() {
-        // Example: Intro cutscene
+        // Example 1: Simple animated cutscene with zoom out effect
         CutsceneData introCutscene = new CutsceneData.Builder("intro")
-                .withImage("Cutscenes/intro_image.png")
+                .addLayer(new CutsceneLayer.Builder("Cutscenes/intro_background.png")
+                        .scale(1.5f) // Start zoomed in
+                        .zoom(CutsceneAnimationType.ZOOM_OUT, 0.5f) // Zoom out 50%
+                        .duration(8.0f)
+                        .build())
                 .withMusic("Audio/Music/intro_music.wav")
                 .addDialog("Narrator", "Welcome to FearJosh...")
                 .addDialog("Narrator", "A horror game where you must escape from Josh.")
@@ -42,9 +42,22 @@ public class CutsceneManager {
 
         cutscenes.put("intro", introCutscene);
 
-        // Example: Game over cutscene
+        // Example 2: Layered cutscene with multiple images and animations
         CutsceneData gameOverCutscene = new CutsceneData.Builder("game_over")
-                .withImage("Cutscenes/game_over_image.png")
+                // Background layer - pan left slowly
+                .addLayer(new CutsceneLayer.Builder("Cutscenes/dark_hallway.png")
+                        .position(0f, 0f)
+                        .scale(1.2f)
+                        .pan(CutsceneAnimationType.PAN_LEFT, 150f)
+                        .duration(10.0f)
+                        .build())
+                // Josh image - zoom in menacingly
+                .addLayer(new CutsceneLayer.Builder("Cutscenes/josh_face.png")
+                        .position(0.3f, 0.2f)
+                        .scale(0.8f)
+                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.4f)
+                        .duration(10.0f)
+                        .build())
                 .withMusic("Audio/Music/game_over_music.wav")
                 .addDialog("Josh", "You cannot escape me...")
                 .addDialog("You have been caught. Try again?")
@@ -52,9 +65,15 @@ public class CutsceneManager {
 
         cutscenes.put("game_over", gameOverCutscene);
 
-        // Example: Victory cutscene
+        // Example 3: Dramatic reveal with zoom + pan combination
         CutsceneData victoryCutscene = new CutsceneData.Builder("victory")
-                .withImage("Cutscenes/victory_image.png")
+                .addLayer(new CutsceneLayer.Builder("Cutscenes/escape_door.png")
+                        .position(0.5f, 0.5f)
+                        .scale(1.3f)
+                        .zoom(CutsceneAnimationType.ZOOM_OUT, 0.3f)
+                        .pan(CutsceneAnimationType.PAN_RIGHT, 100f)
+                        .duration(12.0f)
+                        .build())
                 .withMusic("Audio/Music/victory_music.wav")
                 .addDialog("Narrator", "You escaped!")
                 .addDialog("Narrator", "Congratulations on surviving FearJosh.")
@@ -63,9 +82,8 @@ public class CutsceneManager {
 
         cutscenes.put("victory", victoryCutscene);
 
-        // Example: Dialog-only cutscene (no image)
+        // Example 4: Dialog-only cutscene (no image/layers)
         CutsceneData tutorialCutscene = new CutsceneData.Builder("tutorial")
-                .addDialog("Tutorial", "THIS IS A CUTSCENE TEST")
                 .addDialog("Tutorial", "Use WASD to move.")
                 .addDialog("Tutorial", "Press E to interact with objects.")
                 .addDialog("Tutorial", "Press Q to use items from your inventory.")
@@ -75,6 +93,38 @@ public class CutsceneManager {
                 .build();
 
         cutscenes.put("tutorial", tutorialCutscene);
+
+        // Example 5: Complex multi-layer scene with different animations
+        CutsceneData encounterCutscene = new CutsceneData.Builder("first_encounter")
+                // Far background - slow pan right
+                .addLayer(new CutsceneLayer.Builder("Cutscenes/corridor_background.png")
+                        .position(0f, 0f)
+                        .scale(1.0f)
+                        .pan(CutsceneAnimationType.PAN_RIGHT, 80f)
+                        .duration(15.0f)
+                        .build())
+                // Middle layer - zoom in
+                .addLayer(new CutsceneLayer.Builder("Cutscenes/shadows.png")
+                        .position(0.2f, 0.1f)
+                        .scale(1.1f)
+                        .zoom(CutsceneAnimationType.ZOOM_IN, 0.3f)
+                        .duration(15.0f)
+                        .build())
+                // Foreground - pan left (parallax effect)
+                .addLayer(new CutsceneLayer.Builder("Cutscenes/player_silhouette.png")
+                        .position(0.7f, 0.3f)
+                        .scale(0.9f)
+                        .pan(CutsceneAnimationType.PAN_LEFT, 120f)
+                        .duration(15.0f)
+                        .build())
+                .withMusic("Audio/Music/tension_music.wav")
+                .addDialog("You sense something watching you...")
+                .addDialog("The air grows cold.")
+                .addDialog("You hear footsteps behind you.")
+                .addDialog("RUN!")
+                .build();
+
+        cutscenes.put("first_encounter", encounterCutscene);
 
         System.out.println("[CutsceneManager] Initialized " + cutscenes.size + " cutscenes");
     }

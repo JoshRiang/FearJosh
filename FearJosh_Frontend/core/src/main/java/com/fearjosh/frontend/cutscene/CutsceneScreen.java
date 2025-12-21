@@ -11,12 +11,14 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Align;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.fearjosh.frontend.FearJosh;
 import com.fearjosh.frontend.systems.AudioManager;
 
 /**
- * Screen for displaying cutscenes with images/videos, dialogs, and music.
+ * Screen for displaying cutscenes with animated layered images, dialogs, and
+ * music.
  * User presses SPACE to advance through dialogs.
  */
 public class CutsceneScreen implements Screen {
@@ -29,6 +31,23 @@ public class CutsceneScreen implements Screen {
     private static final float DIALOG_BOX_PADDING = 20f;
     private static final float TEXT_PADDING = 15f;
 
+    // Layer animation state
+    private class LayerState {
+        Texture texture;
+        float currentX;
+        float currentY;
+        float currentScale;
+        float elapsedTime;
+
+        LayerState(Texture texture, float startX, float startY, float startScale) {
+            this.texture = texture;
+            this.currentX = startX;
+            this.currentY = startY;
+            this.currentScale = startScale;
+            this.elapsedTime = 0f;
+        }
+    }
+
     private final FearJosh game;
     private final CutsceneData cutsceneData;
     private final Screen nextScreen; // Screen to show after cutscene ends
@@ -40,7 +59,8 @@ public class CutsceneScreen implements Screen {
     private BitmapFont font;
     private BitmapFont speakerFont;
 
-    private Texture contentTexture; // For image content
+    private Texture contentTexture; // For legacy single image content
+    private Array<LayerState> layerStates; // For animated layers
     private int currentDialogIndex;
     private boolean canAdvance; // Prevent skipping too fast
     private float timeSinceLastAdvance;
@@ -61,6 +81,7 @@ public class CutsceneScreen implements Screen {
         this.currentDialogIndex = 0;
         this.canAdvance = false;
         this.timeSinceLastAdvance = 0f;
+        this.layerStates = new Array<>();
 
         camera = new OrthographicCamera();
         viewport = new FitViewport(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, camera);
@@ -76,8 +97,22 @@ public class CutsceneScreen implements Screen {
         speakerFont.setColor(new Color(1f, 0.8f, 0.2f, 1f)); // Yellow/gold color for speaker name
         speakerFont.getData().setScale(1.2f);
 
-        // Load content if available
-        if (cutsceneData.hasContent() && cutsceneData.getContentType() == CutsceneContentType.IMAGE) {
+        // Load layered images if available
+        if (cutsceneData.hasLayers()) {
+            for (CutsceneLayer layer : cutsceneData.getLayers()) {
+                try {
+                    Texture texture = new Texture(layer.getImagePath());
+                    float startX = layer.getStartX() * VIRTUAL_WIDTH;
+                    float startY = layer.getStartY() * (VIRTUAL_HEIGHT - DIALOG_BOX_HEIGHT);
+                    LayerState state = new LayerState(texture, startX, startY, layer.getStartScale());
+                    layerStates.add(state);
+                    System.out.println("[Cutscene] Loaded layer: " + layer.getImagePath());
+                } catch (Exception e) {
+                    System.err.println("[Cutscene] Failed to load layer: " + layer.getImagePath());
+                }
+            }
+        } else if (cutsceneData.hasContent() && cutsceneData.getContentType() == CutsceneContentType.IMAGE) {
+            // Legacy single image support
             try {
                 contentTexture = new Texture(cutsceneData.getContentPath());
             } catch (Exception e) {
@@ -96,6 +131,7 @@ public class CutsceneScreen implements Screen {
 
         System.out.println("[Cutscene] Started: " + cutsceneData.getCutsceneId());
         System.out.println("[Cutscene] Total dialogs: " + cutsceneData.getDialogCount());
+        System.out.println("[Cutscene] Layers: " + layerStates.size);
     }
 
     @Override
@@ -124,10 +160,12 @@ public class CutsceneScreen implements Screen {
         batch.setProjectionMatrix(camera.combined);
         shapeRenderer.setProjectionMatrix(camera.combined);
 
-        // Render content (image/video background)
+        // Update and render animated layers
         batch.begin();
-        if (contentTexture != null) {
-            // Draw image scaled to fit screen
+        if (layerStates.size > 0) {
+            renderAnimatedLayers(delta);
+        } else if (contentTexture != null) {
+            // Legacy single image rendering
             float imageWidth = VIRTUAL_WIDTH;
             float imageHeight = VIRTUAL_HEIGHT - DIALOG_BOX_HEIGHT;
             batch.draw(contentTexture, 0, DIALOG_BOX_HEIGHT, imageWidth, imageHeight);
@@ -139,6 +177,65 @@ public class CutsceneScreen implements Screen {
 
         // Render current dialog text
         renderDialogText();
+    }
+
+    private void renderAnimatedLayers(float delta) {
+        float contentHeight = VIRTUAL_HEIGHT - DIALOG_BOX_HEIGHT;
+
+        for (int i = 0; i < layerStates.size; i++) {
+            LayerState state = layerStates.get(i);
+            CutsceneLayer layer = cutsceneData.getLayers().get(i);
+
+            // Update animation
+            state.elapsedTime += delta;
+            float progress = Math.min(state.elapsedTime / layer.getAnimationDuration(), 1.0f);
+
+            // Calculate current position and scale based on animation
+            float drawX = state.currentX;
+            float drawY = state.currentY + DIALOG_BOX_HEIGHT;
+            float drawScale = state.currentScale;
+
+            // Apply zoom animation
+            if (layer.hasZoomAnimation()) {
+                float zoomProgress = progress;
+                if (layer.getZoomAnimation() == CutsceneAnimationType.ZOOM_IN) {
+                    drawScale = state.currentScale + (layer.getZoomAmount() * zoomProgress);
+                } else if (layer.getZoomAnimation() == CutsceneAnimationType.ZOOM_OUT) {
+                    drawScale = state.currentScale - (layer.getZoomAmount() * zoomProgress);
+                }
+            }
+
+            // Apply pan animation
+            if (layer.hasPanAnimation()) {
+                float panProgress = progress;
+                switch (layer.getPanAnimation()) {
+                    case PAN_LEFT:
+                        drawX = state.currentX - (layer.getPanAmount() * panProgress);
+                        break;
+                    case PAN_RIGHT:
+                        drawX = state.currentX + (layer.getPanAmount() * panProgress);
+                        break;
+                    case PAN_UP:
+                        drawY = state.currentY + DIALOG_BOX_HEIGHT + (layer.getPanAmount() * panProgress);
+                        break;
+                    case PAN_DOWN:
+                        drawY = state.currentY + DIALOG_BOX_HEIGHT - (layer.getPanAmount() * panProgress);
+                        break;
+                }
+            }
+
+            // Draw the layer with current transformations
+            float layerWidth = state.texture.getWidth() * drawScale;
+            float layerHeight = state.texture.getHeight() * drawScale;
+
+            // Center the image if no specific position was set
+            if (layer.getStartX() == 0f && layer.getStartY() == 0f) {
+                drawX = (VIRTUAL_WIDTH - layerWidth) / 2;
+                drawY = DIALOG_BOX_HEIGHT + (contentHeight - layerHeight) / 2;
+            }
+
+            batch.draw(state.texture, drawX, drawY, layerWidth, layerHeight);
+        }
     }
 
     private void renderDialogBox() {
@@ -265,6 +362,12 @@ public class CutsceneScreen implements Screen {
     public void dispose() {
         if (contentTexture != null) {
             contentTexture.dispose();
+        }
+        // Dispose all layer textures
+        for (LayerState state : layerStates) {
+            if (state.texture != null) {
+                state.texture.dispose();
+            }
         }
         batch.dispose();
         shapeRenderer.dispose();
