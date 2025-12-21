@@ -35,8 +35,11 @@ Sprite/Enemy/josh_idle_2.png
 Sprite/Player/jonatan_down.png
 Sprite/Player/jonatan_left.png
 Sprite/Player/jonatan_right.png
+Sprite/Player/jonatan_terikat.png
 Sprite/Player/jonatan_up.png
 UI/HUD/heart.png
+UI/game_over.jpg
+UI/josh_caught_you.jpg
 UI/main_menu_background.jpg
 josh.png
 joshInvertedFace.png

@@ -69,12 +69,35 @@ public class PlayScreen implements Screen {
     // overlay ambience gelap (vignette)
     private Texture vignetteTexture;
 
+    // ------------ CAPTURE/DEATH SYSTEM ------------
+    private boolean playerBeingCaught = false;
+    private float captureTimer = 0f;
+    private static final float CAPTURE_DELAY = 2.0f; // 2 detik sebelum benar-benar tertangkap
+    private boolean playerFullyCaptured = false;
+    private Texture captureTransitionTexture;
+    private float captureTransitionAlpha = 0f;
+    private static final float CAPTURE_TRANSITION_DURATION = 1.5f; // Durasi fade in transition
+    private float capturePhaseTimer = 0f; // Timer untuk track fase capture (5 detik)
+    private static final float CAPTURE_PHASE_DURATION = 3.0f; // 5 detik untuk overlay
+
+    // ------------ ESCAPE MINIGAME ------------
+    private boolean escapeMinigameActive = false;
+    private float escapeProgress = 0f; // 0.0 to 1.0 (red to green)
+    private float escapeTimer = 0f;
+    private static final float ESCAPE_TIME_LIMIT = 10.0f; // 10 detik untuk escape
+    private static final float ESCAPE_PROGRESS_PER_PRESS = 0.05f; // 5% per press
+    private static final float ESCAPE_PROGRESS_DECAY = 0.03f; // 3% decay per second
+    private int escapeSpacebarPresses = 0;
+
+    // ------------ GAME OVER SYSTEM ------------
+    private boolean isGameOver = false;
+    private float gameOverTimer = 0f;
+    private static final float GAME_OVER_DURATION = 3.0f; // 3 detik game over screen
+
     // Health UI
     private Texture heartTexture;
     private static final float HEART_SIZE = 32f;
     private static final float HEART_SPACING = 8f;
-    private static final float HEART_MARGIN_RIGHT = 20f;
-    private static final float HEART_MARGIN_TOP = 40f;
 
     // Inventory UI (Minecraft-style)
     private Texture inventorySlotTexture;
@@ -196,6 +219,26 @@ public class PlayScreen implements Screen {
 
         vignetteTexture = new Texture("General/vignette.png");
 
+        // Load capture transition texture
+        captureTransitionTexture = new Texture("UI/josh_caught_you.jpg");
+
+        // Initialize capture state
+        playerBeingCaught = false;
+        playerFullyCaptured = false;
+        captureTimer = 0f;
+        captureTransitionAlpha = 0f;
+        capturePhaseTimer = 0f;
+        escapeMinigameActive = false;
+        escapeProgress = 0f;
+        escapeTimer = 0f;
+        escapeSpacebarPresses = 0;
+
+        // Initialize game over state
+        isGameOver = false;
+        gameOverTimer = 0f;
+        // gameOverTexture = new Texture("UI/game_over.png"); // Optional: load game
+        // over image
+
         // Initialize FrameBuffer for darkness layer
         darknessFrameBuffer = new FrameBuffer(Pixmap.Format.RGBA8888, (int) VIRTUAL_WIDTH, (int) VIRTUAL_HEIGHT, false);
 
@@ -227,14 +270,16 @@ public class PlayScreen implements Screen {
         // Enemy spawn is now handled by RoomDirector (abstract/physical mode)
         // Old direct spawn removed - see RoomDirector for stalking behavior
         // Enemy will be created lazily when RoomDirector signals physical presence
-        if (!gm.isTestingMode()) {
-            // Enemy entity will be created on-demand via spawnEnemyPhysically()
-            josh = null; // Start with no physical enemy
-        }
+        // Enemy entity will be created on-demand via spawnEnemyPhysically()
+        josh = null; // Start with no physical enemy
         // ====================================================
 
         // Set kamera awal di player
         cameraController.update(worldCamera, worldViewport, player);
+
+        // Debug: Log testing mode status
+        System.out.println("[PlayScreen] Constructor - Testing Mode: " + gm.isTestingMode());
+        System.out.println("[PlayScreen] Battery initialized: " + battery);
     }
 
     private void switchToRoom(RoomId id) {
@@ -246,17 +291,15 @@ public class PlayScreen implements Screen {
         currentInteractable = null;
 
         // === NOTIFY ROOMDIRECTOR: Player changed room ===
-        if (!gm.isTestingMode()) {
-            gm.notifyPlayerRoomChange(id);
+        gm.notifyPlayerRoomChange(id);
 
-            // Remove physical enemy when changing rooms (becomes abstract)
-            if (josh != null) {
-                RoomDirector rd = gm.getRoomDirector();
-                if (rd != null) {
-                    rd.onEnemyDespawn();
-                }
-                josh = null; // Will respawn via RoomDirector if needed
+        // Remove physical enemy when changing rooms (becomes abstract)
+        if (josh != null) {
+            RoomDirector rd = gm.getRoomDirector();
+            if (rd != null) {
+                rd.onEnemyDespawn();
             }
+            josh = null; // Will respawn via RoomDirector if needed
         }
         // ===============================================
     }
@@ -277,6 +320,22 @@ public class PlayScreen implements Screen {
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        // If game over, show game over screen and handle timer
+        if (isGameOver) {
+            gameOverTimer += delta;
+            if (gameOverTimer >= GAME_OVER_DURATION) {
+                handleGameOverComplete();
+            }
+            renderGameOverScreen();
+            return;
+        }
+
+        // If captured and in phase 1 (first 5 seconds): show black screen + overlay
+        if (playerFullyCaptured && capturePhaseTimer < CAPTURE_PHASE_DURATION) {
+            renderCaptureTransitionPhase();
+            return;
+        }
 
         // ---------- WORLD RENDER ----------
         worldViewport.apply();
@@ -307,27 +366,25 @@ public class PlayScreen implements Screen {
         // === RENDER ENEMY (JOSH) - KOTAK BERWARNA ===
         // Enemy HARUS di-render di world layer SEBELUM fog-of-war
         // Animated sprite untuk Josh dengan state-based animation
-        if (!GameManager.getInstance().isTestingMode()) {
-            if (josh != null && !josh.isDespawned()) {
-                // Switch to SpriteBatch for sprite rendering
-                shapeRenderer.end();
-                batch.setProjectionMatrix(worldCamera.combined);
-                batch.begin();
+        if (josh != null && !josh.isDespawned()) {
+            // Switch to SpriteBatch for sprite rendering
+            shapeRenderer.end();
+            batch.setProjectionMatrix(worldCamera.combined);
+            batch.begin();
 
-                josh.render(batch); // <-- RENDER ENEMY SPRITE
+            josh.render(batch); // <-- RENDER ENEMY SPRITE
 
-                batch.end();
-                shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            batch.end();
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-                // DEBUG: Enhanced visualization (hearing/vision circles + pathfinding)
-                if (debugEnemy) {
-                    josh.renderDebugEnhanced(shapeRenderer);
-                }
-
-                // DEBUG: Verify enemy render (optional - can be removed later)
-                // System.out.println("[DEBUG] Enemy rendered at (" + josh.getX() + ", " +
-                // josh.getY() + "), state=" + josh.getCurrentStateType());
+            // DEBUG: Enhanced visualization (hearing/vision circles + pathfinding)
+            if (debugEnemy) {
+                josh.renderDebugEnhanced(shapeRenderer);
             }
+
+            // DEBUG: Verify enemy render (optional - can be removed later)
+            // System.out.println("[DEBUG] Enemy rendered at (" + josh.getX() + ", " +
+            // josh.getY() + "), state=" + josh.getCurrentStateType());
         }
         // ============================================
 
@@ -368,35 +425,56 @@ public class PlayScreen implements Screen {
         shapeRenderer.setProjectionMatrix(uiCamera.combined);
         batch.setProjectionMatrix(uiCamera.combined);
 
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        hudRenderer.render(shapeRenderer,
-                VIRTUAL_WIDTH,
-                VIRTUAL_HEIGHT,
-                player.getStamina(),
-                player.getMaxStamina(),
-                battery,
-                BATTERY_MAX);
+        // Only render HUD and inventory if NOT captured (or still in phase 1)
+        if (!playerFullyCaptured || capturePhaseTimer < CAPTURE_PHASE_DURATION) {
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            hudRenderer.render(shapeRenderer,
+                    VIRTUAL_WIDTH,
+                    VIRTUAL_HEIGHT,
+                    player.getStamina(),
+                    player.getMaxStamina(),
+                    battery,
+                    BATTERY_MAX);
 
-        // DEBUG: Render hitboxes jika debugHitbox aktif
-        if (debugHitbox && GameManager.getInstance().isPlaying()) {
-            player.debugRenderHitboxes(shapeRenderer);
+            // DEBUG: Render hitboxes jika debugHitbox aktif
+            if (debugHitbox && GameManager.getInstance().isPlaying()) {
+                player.debugRenderHitboxes(shapeRenderer);
+            }
+
+            shapeRenderer.end();
+
+            // Draw HUD text (difficulty)
+            batch.setProjectionMatrix(uiCamera.combined);
+            batch.begin();
+            hudRenderer.renderText(batch, font, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+            batch.end();
+
+            // Render health bar (hearts)
+            batch.setProjectionMatrix(uiCamera.combined);
+            renderHealthBar();
+
+            // Render inventory bar (7 slots, Minecraft-style)
+            batch.setProjectionMatrix(uiCamera.combined);
+            renderInventory();
         }
 
-        shapeRenderer.end();
+        // If captured and after 5 seconds, show hint text
+        if (playerFullyCaptured && capturePhaseTimer >= CAPTURE_PHASE_DURATION && !escapeMinigameActive) {
+            batch.setProjectionMatrix(uiCamera.combined);
+            batch.begin();
+            String hintText = "Press F to release yourself";
+            com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
+                    hintText);
+            float textX = (VIRTUAL_WIDTH - layout.width) / 2f;
+            float textY = 60f; // Bottom center
+            font.draw(batch, hintText, textX, textY);
+            batch.end();
+        }
 
-        // Draw HUD text (difficulty)
-        batch.setProjectionMatrix(uiCamera.combined);
-        batch.begin();
-        hudRenderer.renderText(batch, font, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-        batch.end();
-
-        // Render health bar (hearts)
-        batch.setProjectionMatrix(uiCamera.combined);
-        renderHealthBar();
-
-        // Render inventory bar (7 slots, Minecraft-style)
-        batch.setProjectionMatrix(uiCamera.combined);
-        renderInventory();
+        // Render escape minigame UI
+        if (escapeMinigameActive) {
+            renderEscapeMinigame();
+        }
 
         // Handle pause button click in UI space - HANYA jika state PLAYING
         if (GameManager.getInstance().isPlaying() && Gdx.input.justTouched()) {
@@ -514,9 +592,7 @@ public class PlayScreen implements Screen {
         currentRoom.cleanupInactive();
 
         // === ROOM DIRECTOR SYSTEM: Abstract/Physical enemy control ===
-        if (!GameManager.getInstance().isTestingMode()) {
-            updateRoomDirector(delta);
-        }
+        updateRoomDirector(delta);
         // ==============================================================
 
         // Kamera update di akhir logic
@@ -533,27 +609,109 @@ public class PlayScreen implements Screen {
         if (rd == null)
             return;
 
-        // Update RoomDirector logic (abstract mode movement, grace period, etc.)
-        rd.update(delta);
+        // Don't update RoomDirector if player is captured (freeze enemy behavior)
+        if (!playerFullyCaptured) {
+            // Update RoomDirector logic (abstract mode movement, grace period, etc.)
+            rd.update(delta);
 
-        // Check if enemy should spawn physically
-        if (rd.isEnemyPhysicallyPresent() && josh == null) {
-            // Spawn enemy at door position
-            spawnEnemyPhysically(rd);
+            // Check if enemy should spawn physically
+            if (rd.isEnemyPhysicallyPresent() && josh == null) {
+                // Spawn enemy at door position
+                spawnEnemyPhysically(rd);
+            }
         }
 
-        // Update physical enemy if present
-        if (josh != null && !josh.isDespawned()) {
+        // Update physical enemy if present (but not if player is captured)
+        if (josh != null && !josh.isDespawned() && !playerFullyCaptured) {
             josh.update(player, currentRoom, delta);
 
-            // Check collision with player (GAME OVER)
+            // Check collision with player (CAPTURE SYSTEM)
             if (checkEnemyPlayerCollision(josh, player)) {
-                System.out.println("[GAME OVER] Josh caught you!");
-                // [TODO] Trigger game over / death sequence
+                if (!playerBeingCaught && !playerFullyCaptured) {
+                    // Mulai capture timer
+                    playerBeingCaught = true;
+                    captureTimer = 0f;
+                    System.out.println("[CAPTURE] Josh menangkap player! Timer dimulai...");
+                } else if (playerBeingCaught) {
+                    // Update capture timer
+                    captureTimer += delta;
+
+                    if (captureTimer >= CAPTURE_DELAY) {
+                        // Player benar-benar tertangkap setelah 2 detik
+                        triggerPlayerCaptured();
+                    }
+                }
+            } else {
+                // Player berhasil lepas sebelum 2 detik
+                if (playerBeingCaught && !playerFullyCaptured) {
+                    System.out.println("[CAPTURE] Player berhasil lepas dari Josh!");
+                    playerBeingCaught = false;
+                    captureTimer = 0f;
+                }
             }
 
-            // Clamp to room bounds
-            clampEnemyToRoom(josh);
+            // Clamp to room bounds (only if enemy still exists)
+            if (josh != null) {
+                clampEnemyToRoom(josh);
+            }
+        }
+
+        // Update capture phase timer and transition
+        if (playerFullyCaptured) {
+            capturePhaseTimer += delta;
+
+            // Fade in overlay during first 1.5 seconds
+            if (captureTransitionAlpha < 1f && capturePhaseTimer < CAPTURE_TRANSITION_DURATION) {
+                captureTransitionAlpha += delta / CAPTURE_TRANSITION_DURATION;
+                if (captureTransitionAlpha > 1f) {
+                    captureTransitionAlpha = 1f;
+                }
+            }
+        }
+
+        // Update escape minigame
+        if (escapeMinigameActive) {
+            updateEscapeMinigame(delta);
+        }
+    }
+
+    /**
+     * Triggered when player has been caught for 2 seconds
+     */
+    private void triggerPlayerCaptured() {
+        if (playerFullyCaptured)
+            return; // Already captured
+
+        playerFullyCaptured = true;
+        playerBeingCaught = false;
+
+        System.out.println("[GAME OVER] Josh caught you! Player terikat.");
+
+        // Set player state to captured
+        player.setState(com.fearjosh.frontend.state.player.CapturedState.getInstance());
+        player.setCaptured(true);
+
+        // Kurangi nyawa
+        GameManager gm = GameManager.getInstance();
+        gm.loseLife();
+
+        System.out.println("[LIVES] Remaining lives: " + gm.getCurrentLives());
+
+        // Check if game over (no lives left)
+        if (gm.getCurrentLives() <= 0) {
+            triggerGameOver();
+            return; // Don't do retreat if game over
+        }
+
+        // Make Josh retreat to another room (give player time to escape)
+        if (josh != null) {
+            RoomDirector rd = gm.getRoomDirector();
+            if (rd != null) {
+                rd.onEnemyDespawn();
+                rd.forceEnemyRetreat();
+            }
+            josh = null; // Despawn physical enemy
+            System.out.println("[CAPTURE] Josh retreated to another room. Player has time to escape!");
         }
     }
 
@@ -568,8 +726,10 @@ public class PlayScreen implements Screen {
         float enemyW = playerW * 2f; // 38 * 3 = 114
         float enemyH = playerH * 2f; // 64 * 3 = 192
 
-        // Get spawn position from RoomDirector (at door)
-        float[] pos = rd.getEnemySpawnPosition(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, enemyW, enemyH);
+        // Get spawn position from RoomDirector (at door, or 30px from player in testing
+        // mode)
+        float[] pos = rd.getEnemySpawnPosition(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, enemyW, enemyH, player.getX(),
+                player.getY());
 
         josh = new Enemy(pos[0], pos[1], enemyW, enemyH);
 
@@ -584,6 +744,29 @@ public class PlayScreen implements Screen {
     // ======================
 
     private void handleInput(float delta) {
+        // If minigame is active, only handle spacebar
+        if (escapeMinigameActive) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                escapeProgress += ESCAPE_PROGRESS_PER_PRESS;
+                escapeSpacebarPresses++;
+                if (escapeProgress > 1f) {
+                    escapeProgress = 1f;
+                }
+                System.out.println("[MINIGAME] Space pressed! Progress: " + (escapeProgress * 100) + "% ("
+                        + escapeSpacebarPresses + " presses)");
+            }
+            return; // Don't process other input during minigame
+        }
+
+        // If player is captured (but minigame not started), only handle F key
+        if (playerFullyCaptured && capturePhaseTimer >= CAPTURE_PHASE_DURATION) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.F)) {
+                System.out.println("[CAPTURE] Player pressed F! Starting escape minigame...");
+                startEscapeMinigame();
+            }
+            return; // Don't process any other input when captured
+        }
+
         // 1. Poll input dan execute commands via InputHandler
         inputHandler.update(player, delta);
 
@@ -772,6 +955,15 @@ public class PlayScreen implements Screen {
     }
 
     private void updateBattery(float delta) {
+        // Testing mode: unlimited battery
+        if (GameManager.getInstance().isTestingMode()) {
+            battery = BATTERY_MAX;
+            if (player.isFlashlightOn()) {
+                player.setFlashlightOn(true); // Keep flashlight on
+            }
+            return;
+        }
+
         if (player.isFlashlightOn() && battery > 0) {
             com.fearjosh.frontend.difficulty.DifficultyStrategy ds = com.fearjosh.frontend.core.GameManager
                     .getInstance().getDifficultyStrategy();
@@ -799,8 +991,14 @@ public class PlayScreen implements Screen {
      * Handle inventory-related input:
      * - Number keys (1-7) to select slots
      * - Q key to use selected item
+     * Disabled when player is captured
      */
     private void handleInventoryInput() {
+        // Don't allow inventory input when captured
+        if (playerFullyCaptured) {
+            return;
+        }
+
         GameManager gm = GameManager.getInstance();
         Inventory inventory = gm.getInventory();
 
@@ -1219,8 +1417,14 @@ public class PlayScreen implements Screen {
 
     /**
      * Render inventory bar (7 slots) di bawah tengah screen (Minecraft-style)
+     * Hidden when player is captured
      */
     private void renderInventory() {
+        // Don't render inventory when captured
+        if (playerFullyCaptured) {
+            return;
+        }
+
         GameManager gm = GameManager.getInstance();
         Inventory inventory = gm.getInventory();
 
@@ -1289,6 +1493,98 @@ public class PlayScreen implements Screen {
         return texture;
     }
 
+    /**
+     * Render capture transition phase (first 5 seconds) - black background +
+     * overlay
+     */
+    private void renderCaptureTransitionPhase() {
+        uiCamera.update();
+        shapeRenderer.setProjectionMatrix(uiCamera.combined);
+        batch.setProjectionMatrix(uiCamera.combined);
+
+        // Draw black background
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0f, 0f, 0f, 1f);
+        shapeRenderer.rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        shapeRenderer.end();
+
+        // Draw transition overlay (josh_caught_you.jpg)
+        if (captureTransitionAlpha > 0f && captureTransitionTexture != null) {
+            batch.begin();
+            Color c = batch.getColor();
+            batch.setColor(c.r, c.g, c.b, captureTransitionAlpha);
+            batch.draw(captureTransitionTexture, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+            batch.setColor(c.r, c.g, c.b, 1f);
+            batch.end();
+        }
+    }
+
+    /**
+     * Render capture transition overlay (josh_caught_you.jpg fade in)
+     */
+    private void renderCaptureTransition() {
+        if (captureTransitionTexture == null)
+            return;
+
+        batch.begin();
+
+        // Set alpha for fade in effect
+        Color c = batch.getColor();
+        batch.setColor(c.r, c.g, c.b, captureTransitionAlpha);
+
+        // Draw fullscreen transition image
+        batch.draw(captureTransitionTexture, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+
+        // Reset color
+        batch.setColor(c.r, c.g, c.b, 1f);
+
+        batch.end();
+    }
+
+    /**
+     * Render hint box for captured state ("Press F to get free")
+     */
+    private void renderCaptureHintBox() {
+        // Only show after transition is complete
+        if (captureTransitionAlpha < 1f)
+            return;
+
+        // Draw hint box at bottom center of screen
+        float boxWidth = 300f;
+        float boxHeight = 60f;
+        float boxX = (VIRTUAL_WIDTH - boxWidth) / 2f;
+        float boxY = VIRTUAL_HEIGHT / 2f - 100f; // Below center
+
+        // Draw background box
+        shapeRenderer.setProjectionMatrix(uiCamera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0f, 0f, 0f, 0.8f);
+        shapeRenderer.rect(boxX, boxY, boxWidth, boxHeight);
+
+        // Draw border
+        shapeRenderer.end();
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(1f, 1f, 1f, 1f);
+        Gdx.gl.glLineWidth(2f);
+        shapeRenderer.rect(boxX, boxY, boxWidth, boxHeight);
+        shapeRenderer.end();
+        Gdx.gl.glLineWidth(1f);
+
+        // Draw text
+        batch.begin();
+        font.setColor(Color.WHITE);
+
+        // Calculate text centering
+        com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
+        layout.setText(font, "Press F to get free");
+
+        float textX = boxX + (boxWidth - layout.width) / 2f;
+        float textY = boxY + (boxHeight + layout.height) / 2f;
+
+        font.draw(batch, "Press F to get free", textX, textY);
+        batch.end();
+    }
+
     private Texture createLightTexture(int size) {
         Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
         pixmap.setColor(1f, 1f, 1f, 1f); // White color
@@ -1326,26 +1622,52 @@ public class PlayScreen implements Screen {
         // Stop menu music when entering gameplay
         AudioManager.getInstance().stopMusic();
 
+        // Reset capture state for new game
+        playerBeingCaught = false;
+        playerFullyCaptured = false;
+        captureTimer = 0f;
+        captureTransitionAlpha = 0f;
+
+        System.out.println("[PlayScreen.show()] Capture state reset - playerFullyCaptured: " + playerFullyCaptured);
+
+        // Ensure player is not in captured state
+        if (player != null) {
+            player.setCaptured(false);
+            // Reset to normal state if currently captured
+            if (player.getCurrentState() instanceof com.fearjosh.frontend.state.player.CapturedState) {
+                player.setState(com.fearjosh.frontend.state.player.NormalState.getInstance());
+                System.out.println("[PlayScreen.show()] Player state reset to NormalState");
+            }
+        }
+
         // SET STATE ke PLAYING saat screen ditampilkan
         // (Kecuali jika dari Main Menu yang sudah set PLAYING)
         if (!GameManager.getInstance().isPaused()) {
             GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
         }
-    }
 
-    @Override
-    public void hide() {
+        System.out.println(
+                "[PlayScreen.show()] Screen shown - GameState: " + GameManager.getInstance().getCurrentState());
     }
 
     @Override
     public void pause() {
+        paused = true;
+        GameManager.getInstance().setCurrentState(GameManager.GameState.PAUSED);
     }
 
     @Override
     public void resume() {
+        paused = false;
+        GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
     }
 
     @Override
+    public void hide() {
+        // Clean up resources when screen is hidden
+        paused = false;
+    }
+
     public void dispose() {
         shapeRenderer.dispose();
         batch.dispose();
@@ -1370,6 +1692,226 @@ public class PlayScreen implements Screen {
         if (inventorySlotSelectedTexture != null) {
             inventorySlotSelectedTexture.dispose();
         }
+        if (captureTransitionTexture != null) {
+            captureTransitionTexture.dispose();
+        }
+    }
+
+    // ======================
+    // ESCAPE MINIGAME
+    // ======================
+
+    /**
+     * Start the escape minigame (triggered by pressing F when captured)
+     */
+    private void startEscapeMinigame() {
+        escapeMinigameActive = true;
+        escapeProgress = 0f;
+        escapeTimer = 0f;
+        escapeSpacebarPresses = 0;
+        System.out.println("[MINIGAME] Escape minigame started! Press SPACE to fill the bar!");
+    }
+
+    /**
+     * Update escape minigame logic
+     */
+    private void updateEscapeMinigame(float delta) {
+        escapeTimer += delta;
+
+        // Check win condition FIRST (before decay)
+        if (escapeProgress >= 1f) {
+            System.out.println("[MINIGAME] SUCCESS! Player escaped! Total presses: " + escapeSpacebarPresses);
+            escapeSuccessful();
+            return;
+        }
+
+        // Check lose condition (time ran out)
+        if (escapeTimer >= ESCAPE_TIME_LIMIT) {
+            System.out.println("[MINIGAME] FAILED! Time ran out. Presses: " + escapeSpacebarPresses);
+            escapeFailed();
+            return;
+        }
+
+        // Progress decay over time (makes it harder)
+        escapeProgress -= ESCAPE_PROGRESS_DECAY * delta;
+        if (escapeProgress < 0f) {
+            escapeProgress = 0f;
+        }
+    }
+
+    /**
+     * Called when player successfully escapes
+     */
+    private void escapeSuccessful() {
+        escapeMinigameActive = false;
+        playerFullyCaptured = false;
+        capturePhaseTimer = 0f;
+
+        // Reset player state to normal
+        player.setState(com.fearjosh.frontend.state.player.NormalState.getInstance());
+        player.setCaptured(false);
+
+        System.out.println("[ESCAPE] Player berhasil lepas dari tali!");
+    }
+
+    /**
+     * Called when player fails to escape (time ran out)
+     */
+    private void escapeFailed() {
+        escapeMinigameActive = false;
+        // Player tetap terikat, harus coba lagi
+        System.out.println("[ESCAPE] Player gagal lepas! Press F to try again.");
+    }
+
+    /**
+     * Render escape minigame UI
+     */
+    private void renderEscapeMinigame() {
+        uiCamera.update();
+        shapeRenderer.setProjectionMatrix(uiCamera.combined);
+        batch.setProjectionMatrix(uiCamera.combined);
+
+        // Bar dimensions
+        float barWidth = 400f;
+        float barHeight = 40f;
+        float barX = (VIRTUAL_WIDTH - barWidth) / 2f;
+        float barY = VIRTUAL_HEIGHT / 2f;
+
+        // Draw bar background (dark gray)
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 1f);
+        shapeRenderer.rect(barX, barY, barWidth, barHeight);
+
+        // Draw bar fill (red to green gradient based on progress)
+        float fillWidth = barWidth * escapeProgress;
+        float red = 1f - escapeProgress;
+        float green = escapeProgress;
+        shapeRenderer.setColor(red, green, 0f, 1f);
+        shapeRenderer.rect(barX, barY, fillWidth, barHeight);
+
+        // Draw bar outline
+        shapeRenderer.end();
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(1f, 1f, 1f, 1f);
+        shapeRenderer.rect(barX, barY, barWidth, barHeight);
+        shapeRenderer.end();
+
+        // Draw text instructions and timer
+        batch.begin();
+        String instruction = "PRESS SPACE TO ESCAPE!";
+        com.badlogic.gdx.graphics.g2d.GlyphLayout instructionLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(
+                font, instruction);
+        font.draw(batch, instruction, (VIRTUAL_WIDTH - instructionLayout.width) / 2f, barY + barHeight + 40f);
+
+        // Timer
+        float timeRemaining = ESCAPE_TIME_LIMIT - escapeTimer;
+        String timerText = String.format("Time: %.1fs", timeRemaining);
+        com.badlogic.gdx.graphics.g2d.GlyphLayout timerLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
+                timerText);
+        font.draw(batch, timerText, (VIRTUAL_WIDTH - timerLayout.width) / 2f, barY - 20f);
+
+        // Progress percentage
+        String progressText = String.format("Progress: %d%%", (int) (escapeProgress * 100));
+        com.badlogic.gdx.graphics.g2d.GlyphLayout progressLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
+                progressText);
+        font.draw(batch, progressText, (VIRTUAL_WIDTH - progressLayout.width) / 2f, barY + barHeight / 2f + 5f);
+
+        batch.end();
+    }
+
+    // ======================
+    // GAME OVER SYSTEM
+    // ======================
+
+    /**
+     * Trigger game over (called when lives reach 0)
+     */
+    private void triggerGameOver() {
+        isGameOver = true;
+        gameOverTimer = 0f;
+
+        System.out.println("[GAME OVER] All lives lost! Game Over triggered.");
+
+        // Change game state to prevent resume/pause functionality
+        GameManager gm = GameManager.getInstance();
+        gm.setCurrentState(GameManager.GameState.GAME_OVER);
+
+        // Stop all gameplay
+        playerFullyCaptured = false; // Exit capture state
+        escapeMinigameActive = false;
+        paused = false; // Exit pause state
+
+        // Despawn enemy completely
+        if (josh != null) {
+            RoomDirector rd = gm.getRoomDirector();
+            if (rd != null) {
+                rd.onEnemyDespawn();
+            }
+            josh = null;
+            System.out.println("[GAME OVER] Enemy despawned.");
+        }
+    }
+
+    /**
+     * Called when game over screen finishes (after 3 seconds)
+     */
+    private void handleGameOverComplete() {
+        System.out.println("[GAME OVER] Returning to main menu...");
+
+        // End the current session (disable Resume button)
+        GameManager gm = GameManager.getInstance();
+        if (gm.getCurrentSession() != null) {
+            gm.getCurrentSession().setActive(false);
+            System.out.println("[GAME OVER] Session ended - Resume button will be disabled");
+        }
+
+        // Return to main menu (LibGDX will automatically call dispose() on this screen)
+        game.setScreen(new com.fearjosh.frontend.screen.MainMenuScreen(game));
+    }
+
+    /**
+     * Render game over screen
+     */
+    private void renderGameOverScreen() {
+        uiCamera.update();
+        shapeRenderer.setProjectionMatrix(uiCamera.combined);
+        batch.setProjectionMatrix(uiCamera.combined);
+
+        // Draw dark red background
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0.2f, 0f, 0f, 1f); // Dark red
+        shapeRenderer.rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        shapeRenderer.end();
+
+        // Draw game over text
+        batch.begin();
+
+        // Main "GAME OVER" text
+        String gameOverText = "GAME OVER";
+        com.badlogic.gdx.graphics.g2d.GlyphLayout gameOverLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
+                gameOverText);
+        float gameOverX = (VIRTUAL_WIDTH - gameOverLayout.width) / 2f;
+        float gameOverY = VIRTUAL_HEIGHT / 2f + 50f;
+        font.draw(batch, gameOverText, gameOverX, gameOverY);
+
+        // Subtitle text
+        String subtitleText = "Josh got you...";
+        com.badlogic.gdx.graphics.g2d.GlyphLayout subtitleLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
+                subtitleText);
+        float subtitleX = (VIRTUAL_WIDTH - subtitleLayout.width) / 2f;
+        float subtitleY = VIRTUAL_HEIGHT / 2f;
+        font.draw(batch, subtitleText, subtitleX, subtitleY);
+
+        // Timer countdown text
+        float timeRemaining = GAME_OVER_DURATION - gameOverTimer;
+        String timerText = String.format("Returning to menu in %.0fs...", timeRemaining);
+        com.badlogic.gdx.graphics.g2d.GlyphLayout timerLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
+                timerText);
+        float timerX = (VIRTUAL_WIDTH - timerLayout.width) / 2f;
+        float timerY = VIRTUAL_HEIGHT / 2f - 50f;
+        font.draw(batch, timerText, timerX, timerY);
+
+        batch.end();
     }
 
 }

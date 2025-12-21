@@ -191,24 +191,30 @@ public class MainMenuScreen implements Screen {
                 GameManager.getInstance().startNewGame(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
                 GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
 
-                // Chain cutscenes: 0_1 -> 0_2 -> 0_3 -> 0_4 -> 0_5 -> 0_6 -> 0_7 -> 0_8 -> 0_9
-                // -> game
-                // Screen playScreen = new PlayScreen(game);
-                // Screen cutscene9 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_9", playScreen);
-                // Screen cutscene8 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_8", cutscene9);
-                // Screen cutscene7 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_7", cutscene8);
-                // Screen cutscene6 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_6", cutscene7);
-                // Screen cutscene5 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_5", cutscene6);
-                // Screen cutscene4 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_4", cutscene5);
-                // Screen cutscene3 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_3", cutscene4);
-                // Screen cutscene2 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_2", cutscene3);
-                // Screen cutscene1 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_1", cutscene2);
-                // // Black screen with cutscene 0_1 music
-                // Screen blackTransition = new BlackTransitionScreen(game, cutscene1, 8f,
-                //         "Audio/Music/sad_cutscene_piano_violin.wav");
-                // game.setScreen(blackTransition);
+                Screen playScreen = new PlayScreen(game);
 
-                System.out.println("[MainMenu] NEW GAME clicked - cutscene chain: 0_1 -> 0_9 -> game");
+                // If testing mode, skip cutscenes and go directly to game
+                if (GameManager.getInstance().isTestingMode()) {
+                    game.setScreen(playScreen);
+                    System.out.println("[MainMenu] NEW GAME clicked - TESTING MODE: skipping cutscenes");
+                } else {
+                    // Chain cutscenes: 0_1 -> 0_2 -> 0_3 -> 0_4 -> 0_5 -> 0_6 -> 0_7 -> 0_8 -> 0_9
+                    // -> game
+                    Screen cutscene9 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_9", playScreen);
+                    Screen cutscene8 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_8", cutscene9);
+                    Screen cutscene7 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_7", cutscene8);
+                    Screen cutscene6 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_6", cutscene7);
+                    Screen cutscene5 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_5", cutscene6);
+                    Screen cutscene4 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_4", cutscene5);
+                    Screen cutscene3 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_3", cutscene4);
+                    Screen cutscene2 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_2", cutscene3);
+                    Screen cutscene1 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_1", cutscene2);
+                    // Black screen with cutscene 0_1 music
+                    Screen blackTransition = new BlackTransitionScreen(game, cutscene1, 8f,
+                            "Audio/Music/sad_cutscene_piano_violin.wav");
+                    game.setScreen(blackTransition);
+                    System.out.println("[MainMenu] NEW GAME clicked - cutscene chain: 0_1 -> 0_9 -> game");
+                }
             }
         });
 

@@ -46,6 +46,10 @@ public class Player {
     // ------------ FLASHLIGHT ------------
     private boolean flashlightOn = false;
 
+    // ------------ CAPTURED/TIED SPRITE ------------
+    private Texture tiedTexture;
+    private boolean isCaptured = false;
+
     public Player(float x, float y, float width, float height) {
         this.x = x;
         this.y = y;
@@ -218,11 +222,13 @@ public class Player {
     }
 
     /** @deprecated Use getRenderWidth() - kept for compatibility */
+    @Deprecated
     public float getWidth() {
         return renderWidth; // Return render width instead
     }
 
     /** @deprecated Use getRenderHeight() - kept for compatibility */
+    @Deprecated
     public float getHeight() {
         return renderHeight; // Return render height instead
     }
@@ -279,6 +285,16 @@ public class Player {
         sr.rect(footBounds.x, footBounds.y, footBounds.width, footBounds.height);
     }
 
+    // ------------ CAPTURED STATE ------------
+
+    public void setCaptured(boolean captured) {
+        this.isCaptured = captured;
+    }
+
+    public boolean isCaptured() {
+        return isCaptured;
+    }
+
     // ------------ animasi ------------
 
     public void loadAnimations() {
@@ -288,6 +304,9 @@ public class Player {
         Texture leftTex = new Texture("Sprite/Player/jonatan_left.png");
         Texture upTex = new Texture("Sprite/Player/jonatan_up.png");
         Texture downTex = new Texture("Sprite/Player/jonatan_down.png");
+
+        // Load tied sprite
+        tiedTexture = new Texture("Sprite/Player/jonatan_terikat.png");
 
         // Hitung frameWidth dan frameHeight untuk setiap texture
         int frameWidthRight = rightTex.getWidth() / frameCols;
@@ -325,6 +344,11 @@ public class Player {
     }
 
     public TextureRegion getCurrentFrame(boolean isMoving) {
+        // If captured, always show tied sprite
+        if (isCaptured && tiedTexture != null) {
+            return new TextureRegion(tiedTexture);
+        }
+
         if (!isMoving) {
             switch (direction) {
                 case LEFT:
@@ -347,6 +371,12 @@ public class Player {
                 return walkUp.getKeyFrame(animationTimer);
             default:
                 return walkDown.getKeyFrame(animationTimer);
+        }
+    }
+
+    public void dispose() {
+        if (tiedTexture != null) {
+            tiedTexture.dispose();
         }
     }
 }

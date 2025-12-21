@@ -23,7 +23,8 @@ public class GameManager {
         MAIN_MENU, // Di main menu, hanya tombol menu aktif
         CUTSCENE, // Cutscene playing, input terbatas (skip only)
         PLAYING, // In-game, world update + player bisa gerak
-        PAUSED // Game paused, overlay pause + tombol pause aktif
+        PAUSED, // Game paused, overlay pause + tombol pause aktif
+        GAME_OVER // Game over screen, no input allowed
     }
 
     private static GameManager INSTANCE;
@@ -142,10 +143,8 @@ public class GameManager {
                 player.getX(),
                 player.getY());
 
-        // Initialize RoomDirector for new game
-        if (!testingMode) {
-            initializeRoomDirector(startRoom);
-        }
+        // Initialize RoomDirector for new game (also in testing mode)
+        initializeRoomDirector(startRoom);
 
         System.out.println("[GameManager] NEW GAME started: " + currentSession);
     }
@@ -392,10 +391,10 @@ public class GameManager {
 
     /**
      * Check if game is over (no lives left)
-
-    // ------------ INVENTORY SYSTEM ------------
-
-    /**
+     * 
+     * // ------------ INVENTORY SYSTEM ------------
+     * 
+     * /**
      * Get player's inventory
      */
     public Inventory getInventory() {
