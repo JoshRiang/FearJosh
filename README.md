@@ -28,7 +28,7 @@ A narrative-driven psychological horror game set inside a sealed high school, ex
 
 ## Overview
 
-**JOSHU DITAKUTI** is a psychological survival horror game where players explore a school that has been sealed off as an active crime scene. The building hides a tragedy that occurred during graduation night — and something is still inside.
+**FEAR JOSH** is a psychological survival horror game where players explore a school that has been sealed off as an active crime scene. The building hides a tragedy that occurred during graduation night — and something is still inside.
 
 Players must survive by managing limited resources, avoiding a relentless entity, and uncovering fragments of a buried truth.
 
