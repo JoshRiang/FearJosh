@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="30" height="30" tilewidth="48" tileheight="48" infinite="0" nextlayerid="18" nextobjectid="11">
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="30" height="30" tilewidth="48" tileheight="48" infinite="0" nextlayerid="18" nextobjectid="12">
  <tileset firstgid="1" source="A5.tsx"/>
  <tileset firstgid="129" source="A4.tsx"/>
  <tileset firstgid="369" source="Inside_C.tsx"/>
@@ -291,6 +291,12 @@
   <object id="1" x="861.333" y="1390">
    <properties>
     <property name="from_room" value="hallway"/>
+   </properties>
+   <point/>
+  </object>
+  <object id="11" x="785.084" y="1282.98">
+   <properties>
+    <property name="josh_spawn" type="bool" value="true"/>
    </properties>
    <point/>
   </object>

@@ -81,7 +81,7 @@ public class GameManager {
             player.loadAnimations();
         }
         if (currentRoomId == null) {
-            currentRoomId = RoomId.GYM; // Start in GYM (inside school)
+            currentRoomId = RoomId.LOBBY; // Start in LOBBY
         }
 
         // Initialize lives based on difficulty

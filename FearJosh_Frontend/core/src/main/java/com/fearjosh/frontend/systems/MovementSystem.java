@@ -1,10 +1,7 @@
 package com.fearjosh.frontend.systems;
 
-import com.badlogic.gdx.math.Rectangle;
 import com.fearjosh.frontend.entity.Player;
 import com.fearjosh.frontend.world.Room;
-import com.fearjosh.frontend.world.objects.Table;
-import com.fearjosh.frontend.world.objects.Locker;
 import com.fearjosh.frontend.input.InputHandler;
 
 /**
@@ -89,25 +86,12 @@ public class MovementSystem {
     
     /**
      * COLLISION FURNITURE: Uses FOOT HITBOX of player.
-     * Player only collides with feet, not full body.
+     * NOTE: Now returns false since TMX collision is handled in PlayScreen
+     * This method is kept for compatibility - actual collision is in PlayScreen.collidesWithFurniture
      */
     private boolean collidesWithFurniture(Player player, Room room) {
-        Rectangle footBounds = player.getFootBounds();
-        
-        // Check tables
-        for (Table t : room.getTables()) {
-            if (footBounds.overlaps(t.getCollisionBounds())) {
-                return true;
-            }
-        }
-        
-        // Check lockers
-        for (Locker l : room.getLockers()) {
-            if (footBounds.overlaps(l.getCollisionBounds())) {
-                return true;
-            }
-        }
-        
+        // TMX collision is now handled via TiledMapManager in PlayScreen
+        // This method is a placeholder for compatibility
         return false;
     }
     

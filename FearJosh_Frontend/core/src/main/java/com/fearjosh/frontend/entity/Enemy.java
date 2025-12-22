@@ -6,11 +6,10 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.Rectangle;
 import com.fearjosh.frontend.state.enemy.*;
 import com.fearjosh.frontend.world.Room;
 import com.fearjosh.frontend.world.RoomId;
-import com.fearjosh.frontend.world.objects.Table;
-import com.fearjosh.frontend.world.objects.Locker;
 import com.fearjosh.frontend.systems.PathfindingSystem;
 import com.fearjosh.frontend.render.TiledMapManager;
 import java.util.List;
@@ -20,6 +19,9 @@ public class Enemy {
 
     private float x, y;
     private float width, height;
+
+    // FOOT HITBOX for TMX collision (same system as Player)
+    private Rectangle footBounds;
 
     // TMX collision detection
     private TiledMapManager tiledMapManager;
@@ -113,6 +115,8 @@ public class Enemy {
         this.lastSeenX = x;
         this.lastSeenY = y;
         this.lastSeenRoomId = null; // akan di-set saat update pertama
+        this.footBounds = new Rectangle();
+        updateFootBounds(); // Initialize foot hitbox
 
         searchingState = new EnemySearchingState();
         chasingState = new EnemyChasingState();
@@ -122,6 +126,28 @@ public class Enemy {
 
         // Load Josh animations
         loadAnimations();
+    }
+
+    /**
+     * Update foot hitbox position (call after moving)
+     * Uses same proportions as Player foot hitbox
+     */
+    private void updateFootBounds() {
+        // Foot hitbox: bottom portion of sprite, centered horizontally
+        // Width: 60% of sprite width, Height: 20% of sprite height
+        float footW = width * 0.6f;
+        float footH = height * 0.2f;
+        float footX = x + (width - footW) / 2f; // Center horizontally
+        float footY = y; // Bottom of sprite
+        
+        footBounds.set(footX, footY, footW, footH);
+    }
+
+    /**
+     * Get foot hitbox for collision detection
+     */
+    public Rectangle getFootBounds() {
+        return footBounds;
     }
 
     /**
@@ -434,6 +460,7 @@ public class Enemy {
         // Try full diagonal movement first
         x = oldX + dx;
         y = oldY + dy;
+        updateFootBounds(); // Update foot hitbox after position change
 
         if (collidesWithFurniture(room)) {
             // Full diagonal blocked, try sliding along obstacles
@@ -441,11 +468,13 @@ public class Enemy {
             // Try X-only movement (slide horizontally)
             x = oldX + dx;
             y = oldY;
+            updateFootBounds();
             boolean xBlocked = collidesWithFurniture(room);
 
             // Try Y-only movement (slide vertically)
             x = oldX;
             y = oldY + dy;
+            updateFootBounds();
             boolean yBlocked = collidesWithFurniture(room);
 
             // Apply best available movement
@@ -470,33 +499,30 @@ public class Enemy {
                 x = oldX;
                 y = oldY;
             }
+            updateFootBounds(); // Final update after position resolved
         }
         // If no collision, position already set to (oldX+dx, oldY+dy)
     }
 
+    /**
+     * Collision detection using FOOT HITBOX (same as Player)
+     * Checks all 4 corners and center of foot hitbox for walkability
+     */
     private boolean collidesWithFurniture(Room room) {
-        // Check TMX collision first if available
+        // Check TMX collision using foot hitbox (same as Player)
         if (tiledMapManager != null && tiledMapManager.hasCurrentMap()) {
-            // Only check feet position (bottom center) - enemy can overlap walls visually
-            // but cannot walk through blocked tiles
-            float feetX = x + width / 2f; // Center X
-            float feetY = y + height * 0.1f; // Near bottom of sprite
-
-            // Check single point at feet
-            if (!tiledMapManager.isWalkable(feetX, feetY)) {
+            // Check all 4 corners and center of foot hitbox
+            if (!tiledMapManager.isWalkable(footBounds.x, footBounds.y) ||
+                    !tiledMapManager.isWalkable(footBounds.x + footBounds.width, footBounds.y) ||
+                    !tiledMapManager.isWalkable(footBounds.x, footBounds.y + footBounds.height) ||
+                    !tiledMapManager.isWalkable(footBounds.x + footBounds.width, footBounds.y + footBounds.height) ||
+                    !tiledMapManager.isWalkable(footBounds.x + footBounds.width / 2,
+                            footBounds.y + footBounds.height / 2)) {
                 return true;
             }
         }
 
-        // Also check procedural furniture
-        for (Table t : room.getTables()) {
-            if (overlapsRect(x, y, width, height, t.getX(), t.getY(), t.getWidth(), t.getHeight()))
-                return true;
-        }
-        for (Locker l : room.getLockers()) {
-            if (overlapsRect(x, y, width, height, l.getX(), l.getY(), l.getWidth(), l.getHeight()))
-                return true;
-        }
+        // No procedural furniture collision - TMX maps only
         return false;
     }
 
@@ -505,14 +531,6 @@ public class Enemy {
      */
     public void setTiledMapManager(TiledMapManager manager) {
         this.tiledMapManager = manager;
-    }
-
-    private boolean overlapsRect(float x, float y, float w, float h,
-            float x2, float y2, float w2, float h2) {
-        return x < x2 + w2 &&
-                x + w > x2 &&
-                y < y2 + h2 &&
-                y + h > y2;
     }
 
     public float getCenterX() {

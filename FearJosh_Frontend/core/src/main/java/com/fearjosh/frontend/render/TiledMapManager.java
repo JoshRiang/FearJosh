@@ -615,6 +615,55 @@ public class TiledMapManager implements Disposable {
     }
 
     /**
+     * Get Josh (enemy) spawn point from the current map.
+     * Looks for a spawn object with josh_spawn=true property.
+     * 
+     * @return SpawnInfo with x,y coordinates, or null if not found
+     */
+    public SpawnInfo getJoshSpawnPoint() {
+        if (currentMap == null)
+            return null;
+
+        MapLayer spawnLayer = currentMap.getLayers().get(SPAWN_LAYER);
+        if (spawnLayer == null) {
+            spawnLayer = currentMap.getLayers().get("Spawn");
+            if (spawnLayer == null) {
+                spawnLayer = currentMap.getLayers().get("spawns");
+            }
+        }
+
+        if (spawnLayer == null) {
+            Gdx.app.log("TiledMapManager", "No spawn layer found for josh spawn");
+            return null;
+        }
+
+        MapObjects objects = spawnLayer.getObjects();
+        for (MapObject obj : objects) {
+            // Check for josh_spawn boolean property
+            Boolean isJoshSpawn = obj.getProperties().get("josh_spawn", Boolean.class);
+            
+            if (isJoshSpawn != null && isJoshSpawn) {
+                // Get position - handle both point objects and rectangle objects
+                float x, y;
+                if (obj instanceof RectangleMapObject) {
+                    Rectangle rect = ((RectangleMapObject) obj).getRectangle();
+                    x = rect.x * unitScale;
+                    y = rect.y * unitScale;
+                } else {
+                    // For point objects, use the object's position
+                    x = obj.getProperties().get("x", Float.class) * unitScale;
+                    y = obj.getProperties().get("y", Float.class) * unitScale;
+                }
+                Gdx.app.log("TiledMapManager", "Found Josh spawn point at (" + x + ", " + y + ")");
+                return new SpawnInfo(x, y, "josh_spawn");
+            }
+        }
+
+        Gdx.app.log("TiledMapManager", "No josh_spawn point found in current map");
+        return null;
+    }
+
+    /**
      * Get all doors defined in the current map's "Doors" object layer.
      * Each door should have a "room" property with the target RoomId name.
      */

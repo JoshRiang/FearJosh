@@ -1,8 +1,6 @@
 package com.fearjosh.frontend.systems;
 
 import com.fearjosh.frontend.world.Room;
-import com.fearjosh.frontend.world.objects.Table;
-import com.fearjosh.frontend.world.objects.Locker;
 import java.util.*;
 
 /**
@@ -141,28 +139,12 @@ public class PathfindingSystem {
     
     /**
      * Check if grid cell is blocked by furniture
+     * NOTE: Now returns false since TMX collision is handled elsewhere
+     * Pathfinding should use TiledMapManager for proper obstaclecheck
      */
     private static boolean isBlocked(int gridX, int gridY, Room room) {
-        float worldX = gridX * GRID_SIZE;
-        float worldY = gridY * GRID_SIZE;
-        float cellSize = GRID_SIZE;
-        
-        // Check collision with tables
-        for (Table table : room.getTables()) {
-            if (overlaps(worldX, worldY, cellSize, cellSize,
-                        table.getX(), table.getY(), table.getWidth(), table.getHeight())) {
-                return true;
-            }
-        }
-        
-        // Check collision with lockers
-        for (Locker locker : room.getLockers()) {
-            if (overlaps(worldX, worldY, cellSize, cellSize,
-                        locker.getX(), locker.getY(), locker.getWidth(), locker.getHeight())) {
-                return true;
-            }
-        }
-        
+        // TMX collision is now handled via TiledMapManager in Enemy class
+        // This method is a placeholder - proper pathfinding should integrate with TiledMapManager
         return false;
     }
     
