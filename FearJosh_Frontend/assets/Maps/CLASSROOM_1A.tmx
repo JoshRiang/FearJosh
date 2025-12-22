@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="30" height="30" tilewidth="48" tileheight="48" infinite="0" nextlayerid="18" nextobjectid="11">
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="30" height="30" tilewidth="48" tileheight="48" infinite="0" nextlayerid="18" nextobjectid="12">
  <tileset firstgid="1" source="A5.tsx"/>
  <tileset firstgid="129" source="A4.tsx"/>
  <tileset firstgid="369" source="Inside_C.tsx"/>
@@ -260,11 +260,12 @@
    <point/>
   </object>
  </objectgroup>
- <objectgroup id="14" name="loot">
-  <object id="9" x="587.333" y="883.333" width="29.3333" height="51.3333">
+ <objectgroup id="14" name="exit_key">
+  <object id="11" x="602.667" y="920">
    <properties>
-    <property name="loot_table" type="bool" value="true"/>
+    <property name="item" value="locker_key"/>
    </properties>
+   <point/>
   </object>
  </objectgroup>
  <objectgroup id="17" name="blocked_area">
