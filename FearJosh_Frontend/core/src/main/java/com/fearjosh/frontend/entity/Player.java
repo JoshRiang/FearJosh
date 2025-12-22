@@ -38,6 +38,7 @@ public class Player {
     private PlayerState currentState;
     private boolean sprintIntent = false; // Intent dari input
     private boolean moving = false; // Track apakah player bergerak
+    private boolean captured = false; // Track apakah player ditangkap
 
     // ------------ STAMINA SYSTEM ------------
     private float stamina = 100f;
@@ -138,6 +139,16 @@ public class Player {
 
     public void setFlashlightOn(boolean on) {
         this.flashlightOn = on;
+    }
+
+    // ------------ CAPTURED STATE ------------
+
+    public boolean isCaptured() {
+        return captured;
+    }
+
+    public void setCaptured(boolean captured) {
+        this.captured = captured;
     }
 
     // ------------ MOVEMENT STATE ------------

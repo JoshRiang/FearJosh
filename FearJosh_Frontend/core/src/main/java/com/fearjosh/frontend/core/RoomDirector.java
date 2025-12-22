@@ -224,56 +224,51 @@ public class RoomDirector {
     // ==================== NAVIGATION ====================
     
     /**
-     * Move enemy one room closer to player using Manhattan adjacency
-     * Grid layout:
-     * R1 R2 R3
-     * R4 R5 R6
-     * R7 R8 R9
+     * Move enemy one room closer to player using BFS pathfinding.
+     * Uses door connections (TMX-based) instead of grid coordinates.
      */
     private RoomId moveCloser(RoomId from, RoomId to) {
         if (from == to) return from;
         
-        int fromRow = getRow(from);
-        int fromCol = getCol(from);
-        int toRow = getRow(to);
-        int toCol = getCol(to);
+        // BFS to find shortest path using door connections
+        java.util.Queue<RoomId> queue = new java.util.LinkedList<>();
+        java.util.Map<RoomId, RoomId> cameFrom = new java.util.HashMap<>();
+        java.util.Set<RoomId> visited = new java.util.HashSet<>();
         
-        // Prioritize vertical movement if different rows
-        if (fromRow != toRow) {
-            if (fromRow < toRow && from.down() != null) {
-                return from.down(); // Move down
-            } else if (fromRow > toRow && from.up() != null) {
-                return from.up(); // Move up
+        queue.add(from);
+        visited.add(from);
+        cameFrom.put(from, null);
+        
+        while (!queue.isEmpty()) {
+            RoomId current = queue.poll();
+            
+            if (current == to) {
+                // Found target! Backtrack to find first step
+                RoomId step = to;
+                while (cameFrom.get(step) != from && cameFrom.get(step) != null) {
+                    step = cameFrom.get(step);
+                }
+                return step;
+            }
+            
+            // Check all adjacent rooms via door connections
+            RoomId[] neighbors = { current.up(), current.down(), current.left(), current.right() };
+            for (RoomId neighbor : neighbors) {
+                if (neighbor != null && !visited.contains(neighbor)) {
+                    visited.add(neighbor);
+                    cameFrom.put(neighbor, current);
+                    queue.add(neighbor);
+                }
             }
         }
         
-        // Otherwise move horizontally
-        if (fromCol != toCol) {
-            if (fromCol < toCol && from.right() != null) {
-                return from.right(); // Move right
-            } else if (fromCol > toCol && from.left() != null) {
-                return from.left(); // Move left
-            }
+        // No path found - try random adjacent room as fallback
+        RoomId[] adjacent = { from.up(), from.down(), from.left(), from.right() };
+        for (RoomId adj : adjacent) {
+            if (adj != null) return adj;
         }
         
-        // Fallback: stay in place
-        return from;
-    }
-    
-    /**
-     * Get row index from RoomId
-     * Now uses RoomId's built-in getRow() method
-     */
-    private int getRow(RoomId room) {
-        return room != null ? room.getRow() : 2; // Default to middle row
-    }
-    
-    /**
-     * Get column index from RoomId
-     * Now uses RoomId's built-in getCol() method
-     */
-    private int getCol(RoomId room) {
-        return room != null ? room.getCol() : 3; // Default to entrance column
+        return from; // Stay in place if completely stuck
     }
     
     /**
@@ -364,6 +359,31 @@ public class RoomDirector {
         
         if (debugMode) {
             System.out.println("[RoomDirector] Enemy despawned");
+        }
+    }
+    
+    /**
+     * Force enemy to retreat to a distant room after player escapes capture.
+     * Resets enemy state and moves it away from the player's current room.
+     */
+    public void forceEnemyRetreat() {
+        enemyPhysicallyPresent = false;
+        enemyReadyToEnterRoom = false;
+        doorEntryTriggered = false;
+        enemyMoveTimer = 0f;
+        
+        // Move enemy to a distant room by moving backwards 3 times
+        // Uses the existing adjacency system
+        if (playerRoom != null && lastEnemyRoom != null) {
+            enemyRoom = lastEnemyRoom;
+        }
+        
+        // Reset grace timer to give player breathing room
+        graceTimer = 0f;
+        playerGracePeriod = PLAYER_GRACE_PERIOD_MAX * 2; // Give extra grace period
+        
+        if (debugMode) {
+            System.out.println("[RoomDirector] Enemy forced to retreat to room: " + enemyRoom);
         }
     }
     
@@ -481,15 +501,39 @@ public class RoomDirector {
     // ==================== DISTANCE & TELEPORT MECHANICS ====================
     
     /**
-     * Calculate Manhattan distance between two rooms
+     * Calculate distance between two rooms using BFS (door connections).
+     * Returns actual path length, not grid-based Manhattan distance.
      */
     private int calculateRoomDistance(RoomId from, RoomId to) {
-        int fromRow = getRow(from);
-        int fromCol = getCol(from);
-        int toRow = getRow(to);
-        int toCol = getCol(to);
+        if (from == to) return 0;
+        if (from == null || to == null) return Integer.MAX_VALUE;
         
-        return Math.abs(fromRow - toRow) + Math.abs(fromCol - toCol);
+        // BFS to find shortest path length
+        java.util.Queue<RoomId> queue = new java.util.LinkedList<>();
+        java.util.Map<RoomId, Integer> distance = new java.util.HashMap<>();
+        
+        queue.add(from);
+        distance.put(from, 0);
+        
+        while (!queue.isEmpty()) {
+            RoomId current = queue.poll();
+            int currentDist = distance.get(current);
+            
+            if (current == to) {
+                return currentDist;
+            }
+            
+            // Check all adjacent rooms via door connections
+            RoomId[] neighbors = { current.up(), current.down(), current.left(), current.right() };
+            for (RoomId neighbor : neighbors) {
+                if (neighbor != null && !distance.containsKey(neighbor)) {
+                    distance.put(neighbor, currentDist + 1);
+                    queue.add(neighbor);
+                }
+            }
+        }
+        
+        return Integer.MAX_VALUE; // No path found
     }
     
     /**

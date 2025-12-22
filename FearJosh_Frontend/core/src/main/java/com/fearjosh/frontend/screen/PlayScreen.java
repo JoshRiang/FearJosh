@@ -29,8 +29,10 @@ import com.fearjosh.frontend.core.GameManager;
 import com.fearjosh.frontend.core.RoomDirector;
 import com.fearjosh.frontend.input.InputHandler;
 import com.fearjosh.frontend.systems.Inventory;
+import com.fearjosh.frontend.systems.LootTable;
 import com.fearjosh.frontend.entity.Item;
 import com.fearjosh.frontend.entity.BatteryItem;
+import com.fearjosh.frontend.entity.ChocolateItem;
 import com.fearjosh.frontend.systems.AudioManager;
 
 import java.util.EnumMap;
@@ -64,6 +66,44 @@ public class PlayScreen implements Screen {
     private Texture playerTexture; // hanya dipakai untuk ukuran awal
     // overlay ambience gelap (vignette)
     private Texture vignetteTexture;
+
+    // ------------ CAPTURE/DEATH SYSTEM ------------
+    private boolean playerBeingCaught = false;
+    private float captureTimer = 0f;
+    private static final float CAPTURE_DELAY = 2.0f; // 2 detik sebelum benar-benar tertangkap
+    private boolean playerFullyCaptured = false;
+    private Texture captureTransitionTexture;
+    private float captureTransitionAlpha = 0f;
+    private static final float CAPTURE_TRANSITION_DURATION = 1.5f;
+    private float capturePhaseTimer = 0f;
+    private static final float CAPTURE_PHASE_DURATION = 3.0f;
+
+    // ------------ ESCAPE MINIGAME ------------
+    private boolean escapeMinigameActive = false;
+    private float escapeProgress = 0f; // 0.0 to 1.0 (red to green)
+    private float escapeTimer = 0f;
+    private static final float ESCAPE_TIME_LIMIT = 10.0f;
+    private static final float ESCAPE_PROGRESS_PER_PRESS = 0.05f;
+    private static final float ESCAPE_PROGRESS_DECAY = 0.03f;
+    private int escapeSpacebarPresses = 0;
+
+    // ------------ GAME OVER SYSTEM ------------
+    private boolean isGameOver = false;
+    private float gameOverTimer = 0f;
+    private static final float GAME_OVER_DURATION = 3.0f;
+
+    // ------------ AMBIENT AUDIO ------------
+    private long cricketSoundId = -1;
+    private long rainSoundId = -1;
+    private long footstepSoundId = -1;
+
+    // Monster audio
+    private float monsterGruntTimer = 0f;
+    private static final float MONSTER_GRUNT_INTERVAL = 3.0f;
+    private static final float MONSTER_PROXIMITY_RANGE = 700f;
+    private float monsterRoarTimer = 0f;
+    private static final float MONSTER_ROAR_INTERVAL = 3.0f;
+    private static final float MONSTER_ROAR_RANGE = 400f;
 
     // Health UI
     private Texture heartTexture;
@@ -537,6 +577,33 @@ public class PlayScreen implements Screen {
             }
         }
 
+        // If captured, show hint text after capture phase duration
+        if (playerFullyCaptured && capturePhaseTimer >= CAPTURE_PHASE_DURATION && !escapeMinigameActive) {
+            batch.setProjectionMatrix(uiCamera.combined);
+            batch.begin();
+            String hintText = "Press F to release yourself";
+            com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font, hintText);
+            float textX = (VIRTUAL_WIDTH - layout.width) / 2f;
+            float textY = 60f;
+            font.draw(batch, hintText, textX, textY);
+            batch.end();
+        }
+
+        // Render escape minigame UI
+        if (escapeMinigameActive) {
+            renderEscapeMinigame();
+        }
+
+        // Render game over screen
+        if (isGameOver) {
+            gameOverTimer += delta;
+            renderGameOverScreen();
+            
+            if (gameOverTimer >= GAME_OVER_DURATION) {
+                handleGameOverComplete();
+            }
+        }
+
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
@@ -600,16 +667,109 @@ public class PlayScreen implements Screen {
 
         // Update physical enemy if present
         if (josh != null && !josh.isDespawned()) {
+            // Save position before update for TMX collision resolution
+            float oldX = josh.getX();
+            float oldY = josh.getY();
+            
             josh.update(player, currentRoom, delta);
+            
+            // Apply TMX collision after enemy movement
+            applyEnemyTMXCollision(josh, oldX, oldY);
 
-            // Check collision with player (GAME OVER)
+            // Check collision with player - CAPTURE SYSTEM
             if (checkEnemyPlayerCollision(josh, player)) {
-                System.out.println("[GAME OVER] Josh caught you!");
-                // [TODO] Trigger game over / death sequence
+                if (!playerBeingCaught && !playerFullyCaptured) {
+                    // Start capture timer
+                    playerBeingCaught = true;
+                    captureTimer = 0f;
+                    System.out.println("[CAPTURE] Josh menangkap player! Timer dimulai...");
+                } else if (playerBeingCaught) {
+                    // Update capture timer
+                    captureTimer += delta;
+
+                    if (captureTimer >= CAPTURE_DELAY) {
+                        // Player fully captured after 2 seconds
+                        triggerPlayerCaptured();
+                    }
+                }
+            } else {
+                // Player escaped before 2 seconds
+                if (playerBeingCaught && !playerFullyCaptured) {
+                    System.out.println("[CAPTURE] Player berhasil lepas dari Josh!");
+                    playerBeingCaught = false;
+                    captureTimer = 0f;
+                }
             }
 
-            // Clamp to room bounds
-            clampEnemyToRoom(josh);
+            // Clamp to room bounds (only if enemy still exists)
+            if (josh != null) {
+                clampEnemyToRoom(josh);
+                
+                // Update monster proximity sounds
+                updateMonsterSounds(delta);
+            }
+        }
+
+        // Update capture phase timer and transition
+        if (playerFullyCaptured) {
+            capturePhaseTimer += delta;
+
+            // Fade in overlay during first 1.5 seconds
+            if (captureTransitionAlpha < 1f && capturePhaseTimer < CAPTURE_TRANSITION_DURATION) {
+                captureTransitionAlpha += delta / CAPTURE_TRANSITION_DURATION;
+                if (captureTransitionAlpha > 1f) {
+                    captureTransitionAlpha = 1f;
+                }
+            }
+        }
+
+        // Update escape minigame
+        if (escapeMinigameActive) {
+            updateEscapeMinigame(delta);
+        }
+    }
+    
+    /**
+     * Apply TMX tile collision to enemy movement.
+     * Uses foot-based hitbox (bottom center of sprite) like player.
+     */
+    private void applyEnemyTMXCollision(Enemy enemy, float oldX, float oldY) {
+        if (!tiledMapManager.hasCurrentMap()) return;
+        
+        float newX = enemy.getX();
+        float newY = enemy.getY();
+        
+        // Enemy foot hitbox (bottom 25% of sprite, centered)
+        float footW = enemy.getWidth() * 0.5f;
+        float footH = enemy.getHeight() * 0.25f;
+        float footOffsetX = (enemy.getWidth() - footW) / 2f;
+        float footX = newX + footOffsetX;
+        float footY = newY; // Foot at bottom
+        
+        // Check if new position is walkable
+        if (!tiledMapManager.isAreaWalkable(footX, footY, footW, footH)) {
+            // New position blocked, try sliding
+            
+            // Try X-only movement
+            float testFootX = oldX + footOffsetX + (newX - oldX);
+            boolean xBlocked = !tiledMapManager.isAreaWalkable(testFootX, oldY, footW, footH);
+            
+            // Try Y-only movement
+            float testFootY = oldY + (newY - oldY);
+            boolean yBlocked = !tiledMapManager.isAreaWalkable(oldX + footOffsetX, testFootY, footW, footH);
+            
+            // Apply sliding
+            if (!xBlocked && xBlocked != yBlocked) {
+                enemy.setX(newX);
+                enemy.setY(oldY);
+            } else if (!yBlocked) {
+                enemy.setX(oldX);
+                enemy.setY(newY);
+            } else {
+                // Both blocked, revert to old position
+                enemy.setX(oldX);
+                enemy.setY(oldY);
+            }
         }
     }
 
@@ -640,13 +800,50 @@ public class PlayScreen implements Screen {
     // ======================
 
     private void handleInput(float delta) {
+        // If minigame is active, only handle spacebar
+        if (escapeMinigameActive) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                escapeProgress += ESCAPE_PROGRESS_PER_PRESS;
+                escapeSpacebarPresses++;
+                AudioManager.getInstance().playSound("Audio/Effect/cut_rope_sound_effect.wav");
+
+                if (escapeProgress > 1f) escapeProgress = 1f;
+
+                System.out.println("[MINIGAME] Space pressed! Progress: " + (escapeProgress * 100) + "%");
+            }
+            return;
+        }
+
+        // If player is captured, only handle F key
+        if (playerFullyCaptured && capturePhaseTimer >= CAPTURE_PHASE_DURATION) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.F)) {
+                System.out.println("[CAPTURE] Player pressed F! Starting escape minigame...");
+                startEscapeMinigame();
+            }
+            return;
+        }
+
         // 1. Poll input dan execute commands via InputHandler
         inputHandler.update(player, delta);
 
         // 2. Get movement direction dari InputHandler
         float dx = inputHandler.getMoveDirX();
         float dy = inputHandler.getMoveDirY();
+        boolean wasMoving = isMoving;
         isMoving = inputHandler.isMoving();
+
+        // Handle footstep sound
+        AudioManager audioManager = AudioManager.getInstance();
+        if (isMoving && !wasMoving) {
+            if (footstepSoundId == -1) {
+                footstepSoundId = audioManager.loopSound("Audio/Effect/footstep_sound_effect.wav");
+            }
+        } else if (!isMoving && wasMoving) {
+            if (footstepSoundId != -1) {
+                audioManager.stopSound("Audio/Effect/footstep_sound_effect.wav", footstepSoundId);
+                footstepSoundId = -1;
+            }
+        }
 
         // 3. Calculate speed berdasarkan Player state (Normal/Sprinting)
         float baseSpeed = WALK_SPEED;
@@ -1005,6 +1202,18 @@ public class PlayScreen implements Screen {
                             // Remove battery after use (consumed)
                             inventory.removeItem(inventory.getSelectedSlot());
                             System.out.println("[Inventory] Battery consumed and removed");
+                        } else if (selectedItem instanceof ChocolateItem) {
+                            ChocolateItem chocolateItem = (ChocolateItem) selectedItem;
+                            // Chocolate restores stamina
+                            float staminaToAdd = chocolateItem.getStaminaRestore() * player.getMaxStamina();
+                            float newStamina = player.getStamina() + staminaToAdd;
+                            player.setStamina(newStamina);
+                            showFloatingMessage("Yum! Stamina restored!");
+                            System.out.println("[Inventory] Chocolate consumed - stamina restored by " + 
+                                (chocolateItem.getStaminaRestore() * 100) + "% (+" + staminaToAdd + ")");
+                            // Remove chocolate after use (consumed)
+                            inventory.removeItem(inventory.getSelectedSlot());
+                            System.out.println("[Inventory] Chocolate consumed and removed");
                         }
                         // Add more item types here as needed
                     }
@@ -1069,8 +1278,38 @@ public class PlayScreen implements Screen {
             if (success) {
                 System.out.println("[Interact] Tile toggled to: " + 
                     (currentTileInteractable.isOpen ? "OPEN" : "CLOSED"));
-                // You can add sound effects, item drops, etc. here based on type
-                // if (currentTileInteractable.type.equals("locker")) { ... }
+                
+                // Handle loot when opening a container for the first time
+                if (currentTileInteractable.isOpen && 
+                    currentTileInteractable.canContainLoot() && 
+                    !currentTileInteractable.hasBeenLooted) {
+                    
+                    // Mark as looted so we don't drop again
+                    currentTileInteractable.hasBeenLooted = true;
+                    
+                    // Roll for loot based on container type
+                    LootTable lootTable = LootTable.getTableForType(currentTileInteractable.type);
+                    Item loot = lootTable.rollLoot();
+                    
+                    if (loot != null) {
+                        GameManager gm = GameManager.getInstance();
+                        Inventory inventory = gm.getInventory();
+                        
+                        boolean added = inventory.addItem(loot);
+                        if (added) {
+                            showFloatingMessage("Wow a " + loot.getName() + "!");
+                            System.out.println("[Loot] Found " + loot.getName() + " in " + currentTileInteractable.type);
+                        } else {
+                            showFloatingMessage("Inventory full!");
+                            System.out.println("[Loot] Inventory full! Could not pick up " + loot.getName());
+                            // Item is lost if inventory is full (or could drop on ground)
+                            loot.dispose();
+                        }
+                    } else {
+                        showFloatingMessage("Empty...");
+                        System.out.println("[Loot] " + currentTileInteractable.type + " was empty");
+                    }
+                }
             }
             return;
         }
@@ -1354,6 +1593,48 @@ public class PlayScreen implements Screen {
     }
 
     // ======================
+    // MONSTER SOUND SYSTEM
+    // ======================
+
+    /**
+     * Update monster proximity sounds based on Josh's distance to player
+     */
+    private void updateMonsterSounds(float delta) {
+        if (josh == null || player == null) return;
+        
+        // Calculate distance from Josh to player
+        float dx = josh.getX() - player.getX();
+        float dy = josh.getY() - player.getY();
+        float distance = (float) Math.sqrt(dx * dx + dy * dy);
+        
+        AudioManager audioManager = AudioManager.getInstance();
+        
+        // Roar when very close (more threatening)
+        if (distance < MONSTER_ROAR_RANGE) {
+            monsterRoarTimer += delta;
+            if (monsterRoarTimer >= MONSTER_ROAR_INTERVAL) {
+                audioManager.playSound("Audio/Effect/monster_roar_sound_effect.wav");
+                monsterRoarTimer = 0f;
+                System.out.println("[AUDIO] Monster roar! Distance: " + distance);
+            }
+        } else {
+            monsterRoarTimer = 0f;
+        }
+        
+        // Grunt when nearby (farther range)
+        if (distance < MONSTER_PROXIMITY_RANGE && distance >= MONSTER_ROAR_RANGE) {
+            monsterGruntTimer += delta;
+            if (monsterGruntTimer >= MONSTER_GRUNT_INTERVAL) {
+                audioManager.playSound("Audio/Effect/monster_grunt_sound_effect.wav");
+                monsterGruntTimer = 0f;
+                System.out.println("[AUDIO] Monster grunt! Distance: " + distance);
+            }
+        } else if (distance >= MONSTER_PROXIMITY_RANGE) {
+            monsterGruntTimer = 0f;
+        }
+    }
+
+    // ======================
     // LIFECYCLE
     // ======================
 
@@ -1372,27 +1653,304 @@ public class PlayScreen implements Screen {
         // Stop menu music when entering gameplay
         AudioManager.getInstance().stopMusic();
 
+        // Start gameplay ambient audio
+        AudioManager audioManager = AudioManager.getInstance();
+        audioManager.playMusic("Audio/Music/background_playing_music.wav", true);
+        cricketSoundId = audioManager.loopSound("Audio/Effect/cricket_sound_effect.wav");
+        rainSoundId = audioManager.loopSound("Audio/Effect/rain_sound_effect.wav");
+        System.out.println("[PlayScreen.show()] Ambient audio started - Music, Cricket, Rain");
+
+        // Reset monster sound timers
+        monsterGruntTimer = 0f;
+        monsterRoarTimer = 0f;
+
+        // Reset capture state for new game
+        playerBeingCaught = false;
+        playerFullyCaptured = false;
+        captureTimer = 0f;
+        captureTransitionAlpha = 0f;
+        escapeMinigameActive = false;
+        isGameOver = false;
+
+        System.out.println("[PlayScreen.show()] Capture state reset");
+
+        // Ensure player is not in captured state
+        if (player != null) {
+            player.setCaptured(false);
+            // Reset to normal state if currently captured
+            if (player.getCurrentState() instanceof com.fearjosh.frontend.state.player.CapturedState) {
+                player.setState(com.fearjosh.frontend.state.player.NormalState.getInstance());
+                System.out.println("[PlayScreen.show()] Player state reset to NormalState");
+            }
+        }
+
         // SET STATE ke PLAYING saat screen ditampilkan
         // (Kecuali jika dari Main Menu yang sudah set PLAYING)
         if (!GameManager.getInstance().isPaused()) {
             GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
         }
+
+        System.out.println("[PlayScreen.show()] Screen shown - GameState: " + GameManager.getInstance().getCurrentState());
     }
 
     @Override
     public void hide() {
+        // Stop all ambient audio when leaving the screen
+        AudioManager audioManager = AudioManager.getInstance();
+        audioManager.stopMusic();
+        if (cricketSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/cricket_sound_effect.wav", cricketSoundId);
+            cricketSoundId = -1;
+        }
+        if (rainSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/rain_sound_effect.wav", rainSoundId);
+            rainSoundId = -1;
+        }
+        if (footstepSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/footstep_sound_effect.wav", footstepSoundId);
+            footstepSoundId = -1;
+        }
+        System.out.println("[PlayScreen.hide()] Ambient audio stopped");
     }
 
     @Override
     public void pause() {
+        paused = true;
+        GameManager.getInstance().setCurrentState(GameManager.GameState.PAUSED);
+        AudioManager.getInstance().pauseMusic();
     }
 
     @Override
     public void resume() {
+        paused = false;
+        GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
+        AudioManager.getInstance().resumeMusic();
+    }
+
+    // ======================
+    // CAPTURE SYSTEM
+    // ======================
+
+    /**
+     * Triggered when player has been caught for 2 seconds
+     */
+    private void triggerPlayerCaptured() {
+        if (playerFullyCaptured) return;
+
+        playerFullyCaptured = true;
+        playerBeingCaught = false;
+        capturePhaseTimer = 0f;
+
+        System.out.println("[GAME OVER] Josh caught you! Player terikat.");
+
+        // Play monster roar when capturing
+        AudioManager.getInstance().playSound("Audio/Effect/monster_roar_sound_effect.wav");
+
+        // Set player state to captured
+        player.setState(com.fearjosh.frontend.state.player.CapturedState.getInstance());
+        player.setCaptured(true);
+
+        // Lose a life
+        GameManager gm = GameManager.getInstance();
+        gm.loseLife();
+
+        System.out.println("[LIVES] Remaining lives: " + gm.getCurrentLives());
+
+        // Check if game over (no lives left)
+        if (gm.getCurrentLives() <= 0) {
+            triggerGameOver();
+            return;
+        }
+
+        // Make Josh retreat to another room
+        if (josh != null) {
+            RoomDirector rd = gm.getRoomDirector();
+            if (rd != null) {
+                rd.onEnemyDespawn();
+                rd.forceEnemyRetreat();
+            }
+            josh = null;
+            System.out.println("[CAPTURE] Josh retreated. Player has time to escape!");
+        }
+    }
+
+    // ======================
+    // ESCAPE MINIGAME
+    // ======================
+
+    private void startEscapeMinigame() {
+        escapeMinigameActive = true;
+        escapeProgress = 0f;
+        escapeTimer = 0f;
+        escapeSpacebarPresses = 0;
+        System.out.println("[MINIGAME] Escape minigame started! Press SPACE!");
+    }
+
+    private void updateEscapeMinigame(float delta) {
+        escapeTimer += delta;
+
+        // Check win condition FIRST
+        if (escapeProgress >= 1f) {
+            System.out.println("[MINIGAME] SUCCESS! Player escaped! Presses: " + escapeSpacebarPresses);
+            escapeSuccessful();
+            return;
+        }
+
+        // Check lose condition
+        if (escapeTimer >= ESCAPE_TIME_LIMIT) {
+            System.out.println("[MINIGAME] FAILED! Time ran out.");
+            escapeFailed();
+            return;
+        }
+
+        // Progress decay
+        escapeProgress -= ESCAPE_PROGRESS_DECAY * delta;
+        if (escapeProgress < 0f) escapeProgress = 0f;
+    }
+
+    private void escapeSuccessful() {
+        escapeMinigameActive = false;
+        playerFullyCaptured = false;
+        capturePhaseTimer = 0f;
+
+        player.setState(com.fearjosh.frontend.state.player.NormalState.getInstance());
+        player.setCaptured(false);
+
+        System.out.println("[ESCAPE] Player berhasil lepas dari tali!");
+    }
+
+    private void escapeFailed() {
+        escapeMinigameActive = false;
+        System.out.println("[ESCAPE] Player gagal lepas! Press F to try again.");
+    }
+
+    private void renderEscapeMinigame() {
+        uiCamera.update();
+        shapeRenderer.setProjectionMatrix(uiCamera.combined);
+        batch.setProjectionMatrix(uiCamera.combined);
+
+        float barWidth = 400f;
+        float barHeight = 40f;
+        float barX = (VIRTUAL_WIDTH - barWidth) / 2f;
+        float barY = VIRTUAL_HEIGHT / 2f;
+
+        // Bar background
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 1f);
+        shapeRenderer.rect(barX, barY, barWidth, barHeight);
+
+        // Bar fill (red to green)
+        float fillWidth = barWidth * escapeProgress;
+        float red = 1f - escapeProgress;
+        float green = escapeProgress;
+        shapeRenderer.setColor(red, green, 0f, 1f);
+        shapeRenderer.rect(barX, barY, fillWidth, barHeight);
+        shapeRenderer.end();
+
+        // Bar outline
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(1f, 1f, 1f, 1f);
+        shapeRenderer.rect(barX, barY, barWidth, barHeight);
+        shapeRenderer.end();
+
+        // Text
+        batch.begin();
+        String instruction = "PRESS SPACE TO ESCAPE!";
+        com.badlogic.gdx.graphics.g2d.GlyphLayout instructionLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font, instruction);
+        font.draw(batch, instruction, (VIRTUAL_WIDTH - instructionLayout.width) / 2f, barY + barHeight + 40f);
+
+        float timeRemaining = ESCAPE_TIME_LIMIT - escapeTimer;
+        String timerText = String.format("Time: %.1fs", timeRemaining);
+        com.badlogic.gdx.graphics.g2d.GlyphLayout timerLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font, timerText);
+        font.draw(batch, timerText, (VIRTUAL_WIDTH - timerLayout.width) / 2f, barY - 20f);
+
+        String progressText = String.format("Progress: %d%%", (int)(escapeProgress * 100));
+        com.badlogic.gdx.graphics.g2d.GlyphLayout progressLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font, progressText);
+        font.draw(batch, progressText, (VIRTUAL_WIDTH - progressLayout.width) / 2f, barY + barHeight / 2f + 5f);
+        batch.end();
+    }
+
+    // ======================
+    // GAME OVER SYSTEM
+    // ======================
+
+    private void triggerGameOver() {
+        isGameOver = true;
+        gameOverTimer = 0f;
+
+        System.out.println("[GAME OVER] All lives lost! Game Over triggered.");
+
+        GameManager gm = GameManager.getInstance();
+        gm.setCurrentState(GameManager.GameState.GAME_OVER);
+
+        playerFullyCaptured = false;
+        escapeMinigameActive = false;
+        paused = false;
+
+        if (josh != null) {
+            RoomDirector rd = gm.getRoomDirector();
+            if (rd != null) {
+                rd.onEnemyDespawn();
+            }
+            josh = null;
+        }
+    }
+
+    private void handleGameOverComplete() {
+        System.out.println("[GAME OVER] Returning to main menu...");
+
+        GameManager gm = GameManager.getInstance();
+        if (gm.getCurrentSession() != null) {
+            gm.getCurrentSession().setActive(false);
+        }
+
+        game.setScreen(new com.fearjosh.frontend.screen.MainMenuScreen(game));
+    }
+
+    private void renderGameOverScreen() {
+        uiCamera.update();
+        shapeRenderer.setProjectionMatrix(uiCamera.combined);
+        batch.setProjectionMatrix(uiCamera.combined);
+
+        // Dark red background
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0.2f, 0f, 0f, 1f);
+        shapeRenderer.rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        shapeRenderer.end();
+
+        batch.begin();
+
+        String gameOverText = "GAME OVER";
+        com.badlogic.gdx.graphics.g2d.GlyphLayout gameOverLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font, gameOverText);
+        font.draw(batch, gameOverText, (VIRTUAL_WIDTH - gameOverLayout.width) / 2f, VIRTUAL_HEIGHT / 2f + 50f);
+
+        String subtitleText = "Josh got you...";
+        com.badlogic.gdx.graphics.g2d.GlyphLayout subtitleLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font, subtitleText);
+        font.draw(batch, subtitleText, (VIRTUAL_WIDTH - subtitleLayout.width) / 2f, VIRTUAL_HEIGHT / 2f);
+
+        float timeRemaining = GAME_OVER_DURATION - gameOverTimer;
+        String timerText = String.format("Returning to menu in %.0fs...", timeRemaining);
+        com.badlogic.gdx.graphics.g2d.GlyphLayout timerLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font, timerText);
+        font.draw(batch, timerText, (VIRTUAL_WIDTH - timerLayout.width) / 2f, VIRTUAL_HEIGHT / 2f - 50f);
+
+        batch.end();
     }
 
     @Override
     public void dispose() {
+        // Stop ambient audio first
+        AudioManager audioManager = AudioManager.getInstance();
+        audioManager.stopMusic();
+        if (cricketSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/cricket_sound_effect.wav", cricketSoundId);
+        }
+        if (rainSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/rain_sound_effect.wav", rainSoundId);
+        }
+        if (footstepSoundId != -1) {
+            audioManager.stopSound("Audio/Effect/footstep_sound_effect.wav", footstepSoundId);
+        }
+
         shapeRenderer.dispose();
         batch.dispose();
         font.dispose();
@@ -1410,6 +1968,9 @@ public class PlayScreen implements Screen {
         }
         if (inventorySlotSelectedTexture != null) {
             inventorySlotSelectedTexture.dispose();
+        }
+        if (captureTransitionTexture != null) {
+            captureTransitionTexture.dispose();
         }
         if (tiledMapManager != null) {
             tiledMapManager.dispose();

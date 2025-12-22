@@ -23,7 +23,8 @@ public class GameManager {
         MAIN_MENU, // Di main menu, hanya tombol menu aktif
         CUTSCENE, // Cutscene playing, input terbatas (skip only)
         PLAYING, // In-game, world update + player bisa gerak
-        PAUSED // Game paused, overlay pause + tombol pause aktif
+        PAUSED, // Game paused, overlay pause + tombol pause aktif
+        GAME_OVER // Game over, player lost all lives
     }
 
     private static GameManager INSTANCE;
@@ -329,34 +330,12 @@ public class GameManager {
     }
 
     /**
-     * Get a random room that's distant from start (corners of the map)
+     * Get enemy starting room - always GYM for consistent spawning.
+     * GYM is connected via: GYM -> HALLWAY -> LOBBY (player start)
      */
     private RoomId getRandomDistantRoom(RoomId start) {
-        // Distant rooms from lobby - far classrooms and gym
-        RoomId[] distantRooms = { 
-            RoomId.GYM,            // Large gym at top
-            RoomId.PARKING,        // Parking lot (left)
-            RoomId.CLASS_8A,       // Far right top row
-            RoomId.CLASS_8B,       // Far right bottom row
-            RoomId.CLASS_1A        // First classroom top row
-        };
-
-        // Filter out the player's starting room and adjacent rooms
-        java.util.List<RoomId> validRooms = new java.util.ArrayList<>();
-        for (RoomId room : distantRooms) {
-            if (room != start && !isAdjacent(room, start)) {
-                validRooms.add(room);
-            }
-        }
-
-        if (validRooms.isEmpty()) {
-            // Fallback to GYM if player somehow starts near all distant rooms
-            return RoomId.GYM;
-        }
-
-        // Return random distant room
-        int randomIndex = (int) (Math.random() * validRooms.size());
-        return validRooms.get(randomIndex);
+        // Always start enemy in GYM - it has a TMX map and clear path to player
+        return RoomId.GYM;
     }
     
     /**

@@ -772,6 +772,7 @@ public class TiledMapManager implements Disposable {
         public final int openedTileId;      // GID of opened/active tile
         public final String name;           // Optional name
         public boolean isOpen;              // Current state
+        public boolean hasBeenLooted;       // Whether loot has been collected from this container
         
         public TileInteractable(Rectangle bounds, String type, String targetLayer, 
                                int tileX, int tileY, int closedTileId, int openedTileId, String name) {
@@ -784,6 +785,7 @@ public class TiledMapManager implements Disposable {
             this.openedTileId = openedTileId;
             this.name = name;
             this.isOpen = false;
+            this.hasBeenLooted = false;
         }
         
         public float getCenterX() {
@@ -792,6 +794,20 @@ public class TiledMapManager implements Disposable {
         
         public float getCenterY() {
             return bounds.y + bounds.height / 2f;
+        }
+        
+        /**
+         * Check if this interactable can contain loot
+         * @return true for containers like lockers, chests, desks
+         */
+        public boolean canContainLoot() {
+            if (type == null) return false;
+            String lowerType = type.toLowerCase();
+            return lowerType.equals("locker") || 
+                   lowerType.equals("chest") || 
+                   lowerType.equals("desk") ||
+                   lowerType.equals("drawer") ||
+                   lowerType.equals("cabinet");
         }
     }
     
