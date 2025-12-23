@@ -22,10 +22,16 @@ public class GameManager {
     public enum GameState {
         MAIN_MENU, // Di main menu, hanya tombol menu aktif
         CUTSCENE, // Cutscene playing, input terbatas (skip only)
-        PLAYING, // In-game, world update + player bisa gerak
+        STORY, // Story/Tutorial state - player can move but limited interactions
+        PLAYING, // In-game, world update + player bisa gerak (FULL GAME)
         PAUSED, // Game paused, overlay pause + tombol pause aktif
-        GAME_OVER // Game over screen, no input allowed
+        GAME_OVER, // Game over screen, no input allowed
+        ENDING // Ending cutscene/storyboard
     }
+
+    // Story progression flags
+    private boolean hasMetJosh = false; // True after first encounter in gym
+    private boolean storyObjectiveIsEscape = false; // True after gym cutscene (objective changes from "save Josh" to "escape")
 
     private static GameManager INSTANCE;
 
@@ -34,6 +40,9 @@ public class GameManager {
 
     // ROOM DIRECTOR - Enemy stalking system
     private RoomDirector roomDirector; // Controls enemy abstract/physical presence
+    
+    // JOSH SPAWN CONTROLLER - Context-aware TMX-based spawn system
+    private JoshSpawnController joshSpawnController; // Controls when/where Josh spawns
 
     // Legacy fields (kept for backward compatibility during transition)
     private Player player;
@@ -130,10 +139,24 @@ public class GameManager {
         this.virtualWidth = virtualWidth;
         this.virtualHeight = virtualHeight;
 
+        // CRITICAL: Reset ALL game state for fresh start
+        // Reset story progression flags
+        this.hasMetJosh = false;
+        this.storyObjectiveIsEscape = false;
+        
+        // Reset inventory completely
+        resetInventory();
+        
+        // Reset key progression (escape keys)
+        com.fearjosh.frontend.systems.KeyManager.getInstance().reset();
+
         // Reset player
         this.player = null;
         this.currentRoomId = null;
         initIfNeeded(virtualWidth, virtualHeight);
+        
+        // Reset lives
+        initializeLives();
 
         // Create new session with current difficulty
         RoomId startRoom = RoomId.LOBBY; // Starting room changed to LOBBY for new map system
@@ -147,6 +170,7 @@ public class GameManager {
         initializeRoomDirector(startRoom);
 
         System.out.println("[GameManager] NEW GAME started: " + currentSession);
+        System.out.println("[GameManager] Story flags reset - hasMetJosh: " + hasMetJosh + ", objectiveIsEscape: " + storyObjectiveIsEscape);
     }
 
     /**
@@ -173,6 +197,18 @@ public class GameManager {
     public void saveProgressToSession() {
         if (currentSession != null && currentSession.isActive()) {
             currentSession.updateFromPlayer(player, currentRoomId);
+        }
+    }
+
+    /**
+     * Clear current session (used when quitting to menu without saving)
+     * After this, hasActiveSession() returns false
+     */
+    public void clearSession() {
+        if (currentSession != null) {
+            currentSession.endSession();
+            currentSession = null;
+            System.out.println("[GameManager] Session cleared - no Resume available");
         }
     }
 
@@ -290,11 +326,106 @@ public class GameManager {
     }
 
     public boolean isPlaying() {
-        return currentState == GameState.PLAYING;
+        return currentState == GameState.PLAYING || currentState == GameState.STORY;
     }
 
     public boolean isPaused() {
         return currentState == GameState.PAUSED;
+    }
+    
+    public boolean isInStoryMode() {
+        return currentState == GameState.STORY;
+    }
+    
+    public boolean isInFullPlayMode() {
+        return currentState == GameState.PLAYING;
+    }
+    
+    /**
+     * Check if game is in CUTSCENE state (no player control)
+     */
+    public boolean isInCutscene() {
+        return currentState == GameState.CUTSCENE;
+    }
+    
+    /**
+     * Check if player is in TUTORIAL/STORY state (limited interactions)
+     * In this state, player can only interact with gymnasium door
+     */
+    public boolean isInTutorialState() {
+        return currentState == GameState.STORY && !hasMetJosh;
+    }
+    
+    /**
+     * Check if an interaction is allowed in current state
+     * During TUTORIAL (STORY before meeting Josh), only gym door is allowed
+     * @param interactionType The type of interaction (e.g., "door", "locker", "battery")
+     * @param targetId Optional target identifier (e.g., "gymnasium" for gym door)
+     * @return true if interaction is allowed
+     */
+    public boolean isInteractionAllowed(String interactionType, String targetId) {
+        // In full PLAYING mode, all interactions allowed
+        if (currentState == GameState.PLAYING) {
+            return true;
+        }
+        
+        // In TUTORIAL/STORY mode before meeting Josh
+        if (isInTutorialState()) {
+            // Only allow gym door interaction
+            if ("door".equals(interactionType) && targetId != null) {
+                return targetId.toLowerCase().contains("gym") || 
+                       targetId.toLowerCase().contains("gymnasium");
+            }
+            return false; // Block all other interactions
+        }
+        
+        // In CUTSCENE mode, no interactions
+        if (currentState == GameState.CUTSCENE) {
+            return false;
+        }
+        
+        // Default: allow
+        return true;
+    }
+
+    // ------------ STORY PROGRESSION SYSTEM ------------
+    
+    /**
+     * Check if player has met Josh (first encounter completed)
+     */
+    public boolean hasMetJosh() {
+        return hasMetJosh;
+    }
+    
+    /**
+     * Mark that player has met Josh (after gym cutscene)
+     * This changes the game objective from "save Josh" to "escape"
+     */
+    public void setHasMetJosh(boolean met) {
+        this.hasMetJosh = met;
+        if (met) {
+            this.storyObjectiveIsEscape = true;
+        }
+        System.out.println("[Story] Josh encounter: " + met + ", Objective is now ESCAPE: " + storyObjectiveIsEscape);
+    }
+    
+    /**
+     * Check if player's objective is to escape (vs save Josh)
+     */
+    public boolean isObjectiveEscape() {
+        return storyObjectiveIsEscape;
+    }
+    
+    /**
+     * Transition from STORY to full PLAYING state
+     * Called after gym cutscene when all interactions become available
+     */
+    public void transitionToFullPlayMode() {
+        if (currentState == GameState.STORY) {
+            setCurrentState(GameState.PLAYING);
+            setHasMetJosh(true);
+            System.out.println("[Story] Transitioned to FULL PLAY mode - all interactions enabled");
+        }
     }
 
     // ------------ ROOM DIRECTOR SYSTEM ------------
@@ -309,6 +440,11 @@ public class GameManager {
         roomDirector.setDebugMode(com.fearjosh.frontend.config.Constants.DEBUG_ROOM_DIRECTOR);
 
         System.out.println("[GameManager] RoomDirector initialized: enemy starts in " + enemyStartRoom);
+        
+        // Initialize JoshSpawnController for context-aware spawning
+        joshSpawnController = new JoshSpawnController();
+        joshSpawnController.setDebugMode(com.fearjosh.frontend.config.Constants.DEBUG_ROOM_DIRECTOR);
+        System.out.println("[GameManager] JoshSpawnController initialized");
     }
 
     /**
@@ -317,13 +453,25 @@ public class GameManager {
     public RoomDirector getRoomDirector() {
         return roomDirector;
     }
+    
+    /**
+     * Get JoshSpawnController instance
+     */
+    public JoshSpawnController getJoshSpawnController() {
+        return joshSpawnController;
+    }
 
     /**
      * Notify RoomDirector when player changes room
      */
     public void notifyPlayerRoomChange(RoomId newRoom) {
+        RoomId previousRoom = currentRoomId;
         if (roomDirector != null) {
             roomDirector.onPlayerEnterRoom(newRoom);
+        }
+        // Also notify JoshSpawnController for context tracking
+        if (joshSpawnController != null) {
+            joshSpawnController.onPlayerEnterRoom(newRoom, previousRoom);
         }
     }
 

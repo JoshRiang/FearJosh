@@ -47,9 +47,10 @@ public class Player {
     // ------------ FLASHLIGHT ------------
     private boolean flashlightOn = false;
 
-    // ------------ CAPTURED/TIED SPRITE ------------
-    private Texture tiedTexture;
-    private boolean isCaptured = false;
+    // ------------ INJURED SPRITE ------------
+    // Used when player is hurt (caught by Josh) and needs bandaging
+    private Texture injuredTexture;
+    private boolean isInjured = false;
 
     public Player(float x, float y, float width, float height) {
         this.x = x;
@@ -288,14 +289,16 @@ public class Player {
         sr.rect(footBounds.x, footBounds.y, footBounds.width, footBounds.height);
     }
 
-    // ------------ CAPTURED STATE ------------
+    // ------------ INJURED STATE ------------
+    // Player enters injured state when caught by Josh
+    // Must complete bandage minigame to recover
 
-    public void setCaptured(boolean captured) {
-        this.isCaptured = captured;
+    public void setInjured(boolean injured) {
+        this.isInjured = injured;
     }
 
-    public boolean isCaptured() {
-        return isCaptured;
+    public boolean isInjured() {
+        return isInjured;
     }
 
     // ------------ animasi ------------
@@ -308,8 +311,8 @@ public class Player {
         Texture upTex = new Texture("Sprite/Player/jonatan_up.png");
         Texture downTex = new Texture("Sprite/Player/jonatan_down.png");
 
-        // Load tied sprite
-        tiedTexture = new Texture("Sprite/Player/jonatan_terikat.png");
+        // Load injured sprite (used when player is caught by Josh)
+        injuredTexture = new Texture("Sprite/Player/jonatan_injured.png");
 
         // Hitung frameWidth dan frameHeight untuk setiap texture
         int frameWidthRight = rightTex.getWidth() / frameCols;
@@ -347,9 +350,9 @@ public class Player {
     }
 
     public TextureRegion getCurrentFrame(boolean isMoving) {
-        // If captured, always show tied sprite
-        if (isCaptured && tiedTexture != null) {
-            return new TextureRegion(tiedTexture);
+        // If injured (caught by Josh), show injured sprite
+        if (isInjured && injuredTexture != null) {
+            return new TextureRegion(injuredTexture);
         }
 
         if (!isMoving) {
@@ -378,8 +381,8 @@ public class Player {
     }
 
     public void dispose() {
-        if (tiedTexture != null) {
-            tiedTexture.dispose();
+        if (injuredTexture != null) {
+            injuredTexture.dispose();
         }
     }
 }

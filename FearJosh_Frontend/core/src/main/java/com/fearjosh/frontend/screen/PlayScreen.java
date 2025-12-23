@@ -13,31 +13,35 @@ import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.fearjosh.frontend.FearJosh;
 import com.fearjosh.frontend.camera.CameraController;
 import com.fearjosh.frontend.entity.Enemy;
 import com.fearjosh.frontend.entity.Player;
-import com.fearjosh.frontend.factory.RoomFactory;
+import com.fearjosh.frontend.entity.KeyItem;
 import com.fearjosh.frontend.render.HudRenderer;
 import com.fearjosh.frontend.render.LightingRenderer;
 import com.fearjosh.frontend.render.TiledMapManager;
 import com.fearjosh.frontend.world.*;
 import com.fearjosh.frontend.core.GameManager;
 import com.fearjosh.frontend.core.RoomDirector;
+import com.fearjosh.frontend.core.JoshSpawnController;
 import com.fearjosh.frontend.input.InputHandler;
 import com.fearjosh.frontend.systems.Inventory;
+import com.fearjosh.frontend.systems.TutorialOverlay;
+import com.fearjosh.frontend.systems.KeyManager;
+import com.fearjosh.frontend.cutscene.InGameCutscene;
 import com.fearjosh.frontend.entity.Item;
 import com.fearjosh.frontend.entity.BatteryItem;
 import com.fearjosh.frontend.entity.ChocolateItem;
-import com.fearjosh.frontend.world.LockerLootTable;
 import com.fearjosh.frontend.systems.AudioManager;
+import com.fearjosh.frontend.systems.JumpscareManager;
+import com.fearjosh.frontend.ui.PauseMenuOverlay;
+import com.fearjosh.frontend.ui.InjuredMinigame;
 
-import java.util.EnumMap;
-import java.util.Map;
-
-public class PlayScreen implements Screen {
+public class PlayScreen implements Screen, RoomDirector.RoomDirectorEventListener {
 
     // Transition antar room
     private float transitionCooldown = 0f;
@@ -58,6 +62,19 @@ public class PlayScreen implements Screen {
 
     private final FearJosh game;
     private ShapeRenderer shapeRenderer;
+    
+    // ============== NEW SYSTEMS FOR FINAL GAME ==============
+    // In-game cutscene for Josh encounter
+    private InGameCutscene inGameCutscene;
+    
+    // Tutorial overlay for STORY state
+    private TutorialOverlay tutorialOverlay;
+    
+    // Track if gym encounter has been triggered
+    private boolean gymEncounterTriggered = false;
+    
+    // Gym center trigger zone
+    private static final float GYM_TRIGGER_ZONE_SIZE = 150f;
     private SpriteBatch batch;
     private BitmapFont font;
 
@@ -67,18 +84,21 @@ public class PlayScreen implements Screen {
     // overlay ambience gelap (vignette)
     private Texture vignetteTexture;
 
-    // ------------ CAPTURE/DEATH SYSTEM ------------
+    // ------------ INJURY/DEATH SYSTEM ------------
     private boolean playerBeingCaught = false;
-    private float captureTimer = 0f;
-    private static final float CAPTURE_DELAY = 2.0f; // 2 detik sebelum benar-benar tertangkap
-    private boolean playerFullyCaptured = false;
-    private Texture captureTransitionTexture;
-    private float captureTransitionAlpha = 0f;
-    private static final float CAPTURE_TRANSITION_DURATION = 1.5f; // Durasi fade in transition
-    private float capturePhaseTimer = 0f; // Timer untuk track fase capture (5 detik)
-    private static final float CAPTURE_PHASE_DURATION = 3.0f; // 5 detik untuk overlay
+    private float injuryTimer = 0f;
+    private static final float INJURY_DELAY = 2.0f; // 2 seconds before player is injured
+    private boolean playerFullyInjured = false;
+    private Texture injuryTransitionTexture;
+    private float injuryTransitionAlpha = 0f;
+    private static final float INJURY_TRANSITION_DURATION = 1.5f; // Fade in duration
+    private float injuryPhaseTimer = 0f; // Timer for injury phase (5 seconds)
+    private static final float INJURY_PHASE_DURATION = 3.0f; // 3 seconds for overlay
 
-    // ------------ ESCAPE MINIGAME ------------
+    // ------------ INJURED MINIGAME (replaces old escape minigame) ------------
+    private InjuredMinigame injuredMinigame;
+    
+    // Legacy escape minigame fields (kept for transition, will be replaced by InjuredMinigame)
     private boolean escapeMinigameActive = false;
     private float escapeProgress = 0f; // 0.0 to 1.0 (red to green)
     private float escapeTimer = 0f;
@@ -124,10 +144,8 @@ public class PlayScreen implements Screen {
     private Texture lightTexture; // White circle for punch-through
     // Vision radius and fog darkness now driven by DifficultyStrategy
 
-    // Rooms
-    private final Map<RoomId, Room> rooms = new EnumMap<>(RoomId.class);
+    // Current room tracking (TMX-based)
     private RoomId currentRoomId = RoomId.LOBBY; // Start in LOBBY
-    private Room currentRoom;
 
     // Movement speed constants
     private static final float WALK_SPEED = 150f;
@@ -145,8 +163,7 @@ public class PlayScreen implements Screen {
     private float battery = BATTERY_MAX;
     // NOTE: flashlightOn state sekarang di Player
 
-    // Interaction
-    private Interactable currentInteractable = null;
+    // Interaction (TMX tile-based only - legacy Interactable system removed)
     private com.fearjosh.frontend.render.TiledMapManager.TileInteractable currentTileInteractable = null;
 
     // Floating message above player (e.g., "It's locked...")
@@ -176,7 +193,9 @@ public class PlayScreen implements Screen {
     private static boolean debugHitbox = false;
     private static boolean debugEnemy = false; // AI stalker debug visualization
     private boolean paused = false;
-    private com.badlogic.gdx.math.Rectangle resumeButtonBounds = new com.badlogic.gdx.math.Rectangle();
+    
+    // New pause menu overlay with confirmation dialog
+    private PauseMenuOverlay pauseMenuOverlay;
 
     // ======================
     // ROOM DIMENSION HELPERS
@@ -219,18 +238,21 @@ public class PlayScreen implements Screen {
         hudRenderer = new HudRenderer();
         inputHandler = new InputHandler();
         tiledMapManager = new TiledMapManager();
+        
+        // Connect LightingRenderer to TiledMapManager for wall collision on flashlight
+        lightingRenderer.setMapManager(tiledMapManager);
 
         vignetteTexture = new Texture("General/vignette.png");
 
-        // Load capture transition texture
-        captureTransitionTexture = new Texture("UI/josh_caught_you.jpg");
+        // Load injury transition texture
+        injuryTransitionTexture = new Texture("UI/josh_caught_you.jpg");
 
-        // Initialize capture state
+        // Initialize injury state
         playerBeingCaught = false;
-        playerFullyCaptured = false;
-        captureTimer = 0f;
-        captureTransitionAlpha = 0f;
-        capturePhaseTimer = 0f;
+        playerFullyInjured = false;
+        injuryTimer = 0f;
+        injuryTransitionAlpha = 0f;
+        injuryPhaseTimer = 0f;
         escapeMinigameActive = false;
         escapeProgress = 0f;
         escapeTimer = 0f;
@@ -287,6 +309,48 @@ public class PlayScreen implements Screen {
         // Enemy entity will be created on-demand via spawnEnemyPhysically()
         josh = null; // Start with no physical enemy
         // ====================================================
+        
+        // === INITIALIZE NEW FINAL GAME SYSTEMS ===
+        // In-game cutscene system
+        inGameCutscene = new InGameCutscene();
+        
+        // Injured minigame system (replaces old escape minigame)
+        injuredMinigame = new InjuredMinigame();
+        
+        // Tutorial overlay
+        tutorialOverlay = TutorialOverlay.getInstance();
+        
+        // Reset key manager for new game
+        KeyManager.getInstance().reset();
+        
+        // Initialize pause menu overlay with callbacks
+        pauseMenuOverlay = new PauseMenuOverlay(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        pauseMenuOverlay.setOnResume(() -> {
+            paused = false;
+            GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
+            System.out.println("[PlayScreen] Pause -> Resume");
+        });
+        pauseMenuOverlay.setOnConfirmQuit(() -> {
+            // QUIT TO MENU - Clear session and go to fresh main menu
+            GameManager gm2 = GameManager.getInstance();
+            gm2.clearSession(); // IMPORTANT: Clear session so no Resume in menu
+            gm2.setCurrentState(GameManager.GameState.MAIN_MENU);
+            game.setScreen(new MainMenuScreen(game));
+            System.out.println("[PlayScreen] Pause -> Quit to Menu: Session cleared, fresh menu");
+        });
+        
+        // Check if this is STORY state (first time playing after cutscenes)
+        // In STORY state, player can move but interactions are limited
+        if (gm.getCurrentState() == GameManager.GameState.STORY) {
+            tutorialOverlay.start();
+            gymEncounterTriggered = false;
+            System.out.println("[PlayScreen] STORY mode - Tutorial started, Josh encounter pending");
+        } else if (gm.hasMetJosh()) {
+            // Already met Josh, full gameplay
+            gymEncounterTriggered = true;
+            System.out.println("[PlayScreen] Full PLAYING mode - Josh already encountered");
+        }
+        // ==========================================
 
         // Set kamera awal di player
         cameraController.update(worldCamera, worldViewport, player);
@@ -310,11 +374,9 @@ public class PlayScreen implements Screen {
 
         // Load TMX map for this room (if available)
         tiledMapManager.loadMapForRoom(id);
-
-        // Create room with custom dimensions
-        currentRoom = rooms.computeIfAbsent(id,
-                rid -> RoomFactory.createRoom(rid, rid.getWidth(), rid.getHeight()));
-        currentInteractable = null;
+        
+        // Restore consumed exit_key trigger states for this room
+        restoreConsumedExitKeyTriggers(id);
 
         // === NOTIFY ROOMDIRECTOR: Player changed room ===
         gm.notifyPlayerRoomChange(id);
@@ -325,7 +387,12 @@ public class PlayScreen implements Screen {
             if (rd != null) {
                 rd.onEnemyDespawn();
             }
-            josh = null; // Will respawn via RoomDirector if needed
+            // Notify spawn controller that Josh despawned
+            JoshSpawnController spawnController = gm.getJoshSpawnController();
+            if (spawnController != null) {
+                spawnController.onJoshDespawned();
+            }
+            josh = null; // Will respawn via JoshSpawnController if needed
         }
         // ===============================================
     }
@@ -336,8 +403,27 @@ public class PlayScreen implements Screen {
 
     @Override
     public void render(float delta) {
-        // STATE CHECK: Hanya update jika PLAYING (tidak paused)
-        if (!paused && GameManager.getInstance().isPlaying()) {
+        // === UPDATE IN-GAME CUTSCENE (must happen even when not PLAYING) ===
+        if (inGameCutscene != null && inGameCutscene.isActive()) {
+            inGameCutscene.update(delta);
+        }
+        
+        // === UPDATE TUTORIAL OVERLAY (during STORY state) ===
+        if (tutorialOverlay != null && tutorialOverlay.isActive()) {
+            tutorialOverlay.update(delta);
+        }
+        
+        // STATE CHECK: Update game logic only when PLAYING (not paused or in cutscene)
+        GameManager gm = GameManager.getInstance();
+        boolean canUpdateGameLogic = !paused && !pauseMenuOverlay.isActive() && 
+            (gm.isPlaying() || gm.getCurrentState() == GameManager.GameState.STORY);
+        
+        // Skip game logic update during active cutscene
+        if (inGameCutscene != null && inGameCutscene.isActive()) {
+            canUpdateGameLogic = false;
+        }
+        
+        if (canUpdateGameLogic) {
             update(delta);
         }
 
@@ -357,9 +443,9 @@ public class PlayScreen implements Screen {
             return;
         }
 
-        // If captured and in phase 1 (first 5 seconds): show black screen + overlay
-        if (playerFullyCaptured && capturePhaseTimer < CAPTURE_PHASE_DURATION) {
-            renderCaptureTransitionPhase();
+        // If injured and in phase 1 (first 5 seconds): show black screen + overlay
+        if (playerFullyInjured && injuryPhaseTimer < INJURY_PHASE_DURATION) {
+            renderInjuryTransitionPhase();
             return;
         }
 
@@ -379,6 +465,9 @@ public class PlayScreen implements Screen {
             batch.end();
             tiledMapManager.renderBelowPlayerExcludingYSorted(worldCamera);
             batch.begin();
+            
+            // NOTE: locker_key is now rendered AFTER Y-sorted layers (furniture)
+            // so it appears ON TOP of tables/desks
         }
         // No fallback procedural floor - TMX maps only
 
@@ -416,13 +505,14 @@ public class PlayScreen implements Screen {
         }
         // ============================================
 
-        for (Interactable i : currentRoom.getInteractables())
-            if (i.isActive())
-                i.render(shapeRenderer);
+        // Legacy Interactable rendering removed - all interactables now via TMX
 
         shapeRenderer.end();
 
         // 3) Texture: player + prompt 'E' (with Y-sorted TMX furniture)
+        // Skip player rendering if injured minigame is active (player sprite handled by minigame)
+        boolean shouldRenderPlayer = !injuredMinigame.isActive();
+        
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
 
@@ -430,41 +520,41 @@ public class PlayScreen implements Screen {
         if (tiledMapManager.hasCurrentMap()) {
             batch.end();
             tiledMapManager.renderWithYSort(worldCamera, batch, player.getY(), () -> {
-                batch.begin();
-                TextureRegion frame = player.getCurrentFrame(isMoving);
-                batch.draw(frame,
-                        player.getX(),
-                        player.getY(),
-                        player.getRenderWidth(),
-                        player.getRenderHeight());
-                batch.end();
+                if (shouldRenderPlayer) {
+                    batch.begin();
+                    TextureRegion frame = player.getCurrentFrame(isMoving);
+                    batch.draw(frame,
+                            player.getX(),
+                            player.getY(),
+                            player.getRenderWidth(),
+                            player.getRenderHeight());
+                    batch.end();
+                }
             });
             batch.begin();
 
+            // Render ONLY physical locker_key pickup (janitor_key and gym_key are invisible triggers)
+            // Rendered AFTER Y-sorted layers so key appears ON TOP of furniture/tables
+            tiledMapManager.renderPhysicalLockerKey(batch);
+            
             // Render above-player layers (if any)
             batch.end();
             tiledMapManager.renderAbovePlayer(worldCamera);
             batch.begin();
         } else {
             // Fallback: render player without Y-sort
-            TextureRegion frame = player.getCurrentFrame(isMoving);
-            batch.draw(frame,
-                    player.getX(),
-                    player.getY(),
-                    player.getRenderWidth(),
-                    player.getRenderHeight());
+            if (shouldRenderPlayer) {
+                TextureRegion frame = player.getCurrentFrame(isMoving);
+                batch.draw(frame,
+                        player.getX(),
+                        player.getY(),
+                        player.getRenderWidth(),
+                        player.getRenderHeight());
+            }
         }
 
-        // prompt E
-        if (currentInteractable != null && currentInteractable.isActive()) {
-            font.draw(batch,
-                    "E",
-                    currentInteractable.getCenterX() - 4,
-                    currentInteractable.getCenterY() + 30);
-        }
-
-        // prompt E for tile interactables
-        if (currentTileInteractable != null) {
+        // prompt E for tile interactables (TMX-based only now) - only when not in minigame
+        if (currentTileInteractable != null && !injuredMinigame.isActive()) {
             font.draw(batch,
                     "E",
                     currentTileInteractable.getCenterX() - 4,
@@ -472,7 +562,7 @@ public class PlayScreen implements Screen {
         }
 
         // Floating message above player (e.g., "It's locked...")
-        if (floatingMessage != null && floatingMessageTimer > 0) {
+        if (floatingMessage != null && floatingMessageTimer > 0 && !injuredMinigame.isActive()) {
             font.draw(batch,
                     floatingMessage,
                     player.getCenterX() - floatingMessage.length() * 3,
@@ -489,8 +579,8 @@ public class PlayScreen implements Screen {
         shapeRenderer.setProjectionMatrix(uiCamera.combined);
         batch.setProjectionMatrix(uiCamera.combined);
 
-        // Only render HUD and inventory if NOT captured (or still in phase 1)
-        if (!playerFullyCaptured || capturePhaseTimer < CAPTURE_PHASE_DURATION) {
+        // Only render HUD and inventory if NOT injured (or still in phase 1)
+        if (!playerFullyInjured || injuryPhaseTimer < INJURY_PHASE_DURATION) {
             shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
             hudRenderer.render(shapeRenderer,
                     VIRTUAL_WIDTH,
@@ -507,12 +597,6 @@ public class PlayScreen implements Screen {
 
             shapeRenderer.end();
 
-            // Draw HUD text (difficulty)
-            batch.setProjectionMatrix(uiCamera.combined);
-            batch.begin();
-            hudRenderer.renderText(batch, font, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-            batch.end();
-
             // Render health bar (hearts)
             batch.setProjectionMatrix(uiCamera.combined);
             renderHealthBar();
@@ -522,11 +606,11 @@ public class PlayScreen implements Screen {
             renderInventory();
         }
 
-        // If captured and after 5 seconds, show hint text
-        if (playerFullyCaptured && capturePhaseTimer >= CAPTURE_PHASE_DURATION && !escapeMinigameActive) {
+        // If injured and after 3 seconds, show hint text (only if injured minigame is not active)
+        if (playerFullyInjured && injuryPhaseTimer >= INJURY_PHASE_DURATION && !injuredMinigame.isActive() && !escapeMinigameActive) {
             batch.setProjectionMatrix(uiCamera.combined);
             batch.begin();
-            String hintText = "Press F to release yourself";
+            String hintText = "Press F to bandage yourself";
             com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
                     hintText);
             float textX = (VIRTUAL_WIDTH - layout.width) / 2f;
@@ -535,13 +619,22 @@ public class PlayScreen implements Screen {
             batch.end();
         }
 
-        // Render escape minigame UI
+        // === RENDER INJURED MINIGAME FULL OVERLAY ===
+        // This renders the complete minigame UI with injured sprite, progress bar, and instructions
+        if (injuredMinigame.isActive()) {
+            shapeRenderer.setProjectionMatrix(uiCamera.combined);
+            batch.setProjectionMatrix(uiCamera.combined);
+            // Use full overlay render - shows injured sprite, progress bar, text instructions
+            injuredMinigame.render(shapeRenderer, batch, font, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        }
+
+        // Render escape minigame UI (legacy - kept for transition)
         if (escapeMinigameActive) {
             renderEscapeMinigame();
         }
 
-        // Handle pause button click in UI space - HANYA jika state PLAYING
-        if (GameManager.getInstance().isPlaying() && Gdx.input.justTouched()) {
+        // Handle pause button click in UI space - HANYA jika state PLAYING dan tidak sedang dalam pause overlay
+        if (GameManager.getInstance().isPlaying() && !pauseMenuOverlay.isActive() && Gdx.input.justTouched()) {
             float screenX = Gdx.input.getX();
             float screenY = Gdx.input.getY();
             // Convert to UI world coords
@@ -549,92 +642,88 @@ public class PlayScreen implements Screen {
                     .unproject(new com.badlogic.gdx.math.Vector3(screenX, screenY, 0));
             com.badlogic.gdx.math.Rectangle r = hudRenderer.getPauseButtonBounds();
             if (r.contains(uiCoords.x, uiCoords.y)) {
-                paused = !paused;
-                // Update state
-                if (paused) {
-                    GameManager.getInstance().setCurrentState(GameManager.GameState.PAUSED);
-                } else {
-                    GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
-                }
+                paused = true;
+                pauseMenuOverlay.show();
+                GameManager.getInstance().setCurrentState(GameManager.GameState.PAUSED);
             }
         }
+        
+        // Handle ESC key to pause - HANYA jika PLAYING
+        if (GameManager.getInstance().isPlaying() && !pauseMenuOverlay.isActive() && 
+            Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            paused = true;
+            pauseMenuOverlay.show();
+            GameManager.getInstance().setCurrentState(GameManager.GameState.PAUSED);
+        }
 
-        // If paused, draw overlay with Resume button and handle inputs
-        if (paused) {
-            // Draw dim backdrop and panel
-            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-            shapeRenderer.setColor(0f, 0f, 0f, 0.35f);
-            shapeRenderer.rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-            shapeRenderer.setColor(0.12f, 0.12f, 0.15f, 0.9f);
-            float panelW = 360f, panelH = 140f;
-            float panelX = (VIRTUAL_WIDTH - panelW) / 2f;
-            float panelY = (VIRTUAL_HEIGHT - panelH) / 2f;
-            shapeRenderer.rect(panelX, panelY, panelW, panelH);
+        // Update and render pause menu overlay
+        if (pauseMenuOverlay.isActive()) {
+            pauseMenuOverlay.update(uiCamera);
+            batch.setProjectionMatrix(uiCamera.combined);
+            pauseMenuOverlay.render(shapeRenderer, batch, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        }
+        
+        // === RENDER TUTORIAL OVERLAY (during STORY state) ===
+        if (tutorialOverlay != null && tutorialOverlay.isActive()) {
+            tutorialOverlay.render(shapeRenderer, batch, font, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        }
+        
+        // === RENDER IN-GAME CUTSCENE ===
+        if (inGameCutscene != null && inGameCutscene.isActive()) {
+            inGameCutscene.render(shapeRenderer, batch, font, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        }
+        
+        // === ALWAYS RENDER DIFFICULTY AND ROOM INFO (bottom-left and top-right) ===
+        // This is rendered outside the injured check so it's always visible
+        batch.setProjectionMatrix(uiCamera.combined);
+        batch.begin();
+        hudRenderer.renderText(batch, font, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        batch.end();
+        
+        // === RENDER OBJECTIVE HINT (after meeting Josh) ===
+        if (GameManager.getInstance().isObjectiveEscape() && !paused && !isGameOver && 
+            (inGameCutscene == null || !inGameCutscene.isActive())) {
+            renderObjectiveHint();
+        }
+        
+        // === RENDER DIFFICULTY TEXT - MUST BE LAST! ===
+        // This ensures difficulty is ALWAYS visible at bottom-left, regardless of state
+        batch.setProjectionMatrix(uiCamera.combined);
+        batch.begin();
+        hudRenderer.renderDifficultyText(batch, font);
+        batch.end();
 
-            // Resume button inside panel
-            float btnW = 160f, btnH = 36f;
-            float btnX = panelX + (panelW - btnW) / 2f;
-            float btnY = panelY + 18f;
-            resumeButtonBounds.set(btnX, btnY, btnW, btnH);
-            shapeRenderer.setColor(0.18f, 0.18f, 0.22f, 1f);
-            shapeRenderer.rect(btnX, btnY, btnW, btnH);
-            // Main Menu button
-            float menuBtnW = 160f, menuBtnH = 36f;
-            float menuBtnX = panelX + (panelW - menuBtnW) / 2f;
-            float menuBtnY = btnY + btnH + 10f;
-            shapeRenderer.setColor(0.18f, 0.18f, 0.22f, 1f);
-            shapeRenderer.rect(menuBtnX, menuBtnY, menuBtnW, menuBtnH);
-            shapeRenderer.end();
-
-            // Text
+        // === RENDER JUMPSCARE (ABSOLUTE LAST - on top of EVERYTHING) ===
+        // Jumpscares should cover the entire screen including UI
+        if (JumpscareManager.getInstance().isJumpscareActive()) {
             batch.setProjectionMatrix(uiCamera.combined);
             batch.begin();
-            font.draw(batch, "Paused", VIRTUAL_WIDTH / 2f - 36f, panelY + panelH - 18f);
-            font.draw(batch, "Resume", btnX + 52f, btnY + 24f);
-            font.draw(batch, "Main Menu", menuBtnX + 40f, menuBtnY + 24f);
+            JumpscareManager.getInstance().render(batch, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
             batch.end();
-
-            // Keyboard shortcuts to resume - HANYA jika state PAUSED
-            if (GameManager.getInstance().isPaused()) {
-                if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) ||
-                        Gdx.input.isKeyJustPressed(Input.Keys.SPACE) ||
-                        Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-                    paused = false;
-                    GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
-                }
-            }
-
-            // Mouse click on Resume or Main Menu - HANYA jika state PAUSED
-            if (GameManager.getInstance().isPaused() && Gdx.input.justTouched()) {
-                float sx = Gdx.input.getX();
-                float sy = Gdx.input.getY();
-                com.badlogic.gdx.math.Vector3 ui = uiCamera.unproject(new com.badlogic.gdx.math.Vector3(sx, sy, 0));
-
-                if (resumeButtonBounds.contains(ui.x, ui.y)) {
-                    paused = false;
-                    GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
-                } else {
-                    // Test main menu button area
-                    float testW = 160f, testH = 36f;
-                    float testX = panelX + (panelW - testW) / 2f;
-                    float testY = btnY + btnH + 10f;
-                    if (ui.x >= testX && ui.x <= testX + testW && ui.y >= testY && ui.y <= testY + testH) {
-                        // Go back to main menu - SAVE PROGRESS first, then return to menu
-                        GameManager gm = GameManager.getInstance();
-                        gm.saveProgressToSession(); // CRITICAL: Save before leaving
-                        gm.setCurrentState(GameManager.GameState.MAIN_MENU);
-                        com.fearjosh.frontend.FearJosh app = this.game;
-                        app.setScreen(new com.fearjosh.frontend.screen.MainMenuScreen(app));
-                        System.out.println("[PlayScreen] Pause -> Main Menu: Progress saved, session remains active");
-                    }
-                }
-            }
         }
 
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
+    
+    /**
+     * Render objective hint at top of screen
+     */
+    private void renderObjectiveHint() {
+        String hint = KeyManager.getInstance().getProgressHint();
+        if (hint == null || hint.isEmpty()) return;
+        
+        batch.setProjectionMatrix(uiCamera.combined);
+        batch.begin();
+        font.setColor(0.9f, 0.9f, 0.5f, 0.8f);
+        com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font, hint);
+        font.draw(batch, hint, (VIRTUAL_WIDTH - layout.width) / 2f, VIRTUAL_HEIGHT - 20f);
+        font.setColor(Color.WHITE);
+        batch.end();
+    }
 
     private void update(float delta) {
+        // Cutscene and tutorial updates are handled in render() to prevent freeze
+        // when game state changes to CUTSCENE (which blocks isPlaying() check)
 
         // Update floating message timer
         if (floatingMessageTimer > 0) {
@@ -656,48 +745,402 @@ public class PlayScreen implements Screen {
         if (transitionCooldown <= 0) {
             checkRoomTransition();
         }
+        
+        // === CHECK GYM ENCOUNTER TRIGGER (STORY state only) ===
+        checkGymEncounterTrigger();
 
         updateBattery(delta);
-        findCurrentInteractable();
-        findCurrentTileInteractable();
-        handleInteractInput();
+        findCurrentTileInteractable(); // TMX-based interaction only
+        
+        // === CHECK EXIT_KEY TRIGGERS (TMX trigger zones for key progression) ===
+        // Handles: locker_key (Class1A), janitor_key (Hallway), gym_key (Janitor room)
+        checkExitKeyTriggers();
+        
+        // === AUTO-TRIGGER KEY USAGE for DOORS (proximity-based) ===
+        checkAutoKeyTrigger();
+        
         handleTileInteractInput();
         handleInventoryInput();
-        currentRoom.cleanupInactive();
+
+        // === UPDATE JUMPSCARE MANAGER ===
+        // Only update when not blocked (paused/cutscene/minigame)
+        boolean jumpscareBlocked = paused || pauseMenuOverlay.isActive() || 
+            (inGameCutscene != null && inGameCutscene.isActive()) ||
+            injuredMinigame.isActive() || tutorialOverlay.isActive();
+        JumpscareManager.getInstance().update(delta, !jumpscareBlocked);
+        
+        // Update hallway state for ambient jumpscare boost
+        JumpscareManager.getInstance().setInHallway(currentRoomId == RoomId.HALLWAY);
 
         // === ROOM DIRECTOR SYSTEM: Abstract/Physical enemy control ===
-        updateRoomDirector(delta);
+        // Only active AFTER meeting Josh (not during STORY state)
+        if (GameManager.getInstance().hasMetJosh()) {
+            updateRoomDirector(delta);
+        }
         // ==============================================================
 
         // Kamera update di akhir logic
         cameraController.update(worldCamera, worldViewport, player);
     }
+    
+    /**
+     * Check if player has reached gym center to trigger Josh encounter
+     * Only triggers during STORY state (before meeting Josh)
+     */
+    private void checkGymEncounterTrigger() {
+        GameManager gm = GameManager.getInstance();
+        
+        // Only trigger during STORY state before meeting Josh
+        if (gymEncounterTriggered || gm.hasMetJosh()) {
+            return;
+        }
+        
+        // Only in GYM room
+        if (currentRoomId != RoomId.GYM) {
+            return;
+        }
+        
+        // Check if player is near center of gym
+        float gymCenterX = getRoomWidth() / 2f;
+        float gymCenterY = getRoomHeight() / 2f;
+        
+        float playerCenterX = player.getCenterX();
+        float playerCenterY = player.getCenterY();
+        
+        float dx = playerCenterX - gymCenterX;
+        float dy = playerCenterY - gymCenterY;
+        float distance = (float) Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < GYM_TRIGGER_ZONE_SIZE) {
+            // TRIGGER GYM ENCOUNTER!
+            gymEncounterTriggered = true;
+            System.out.println("[PlayScreen] GYM ENCOUNTER TRIGGERED! Starting cutscene...");
+            
+            // Skip tutorial if still running
+            if (tutorialOverlay != null && tutorialOverlay.isActive()) {
+                tutorialOverlay.skip();
+            }
+            
+            // Start gym encounter cutscene
+            inGameCutscene.startCutscene(InGameCutscene.CutsceneType.GYM_ENCOUNTER, () -> {
+                // After gym encounter cutscene completes, show objective change
+                System.out.println("[PlayScreen] Gym encounter complete, showing objective change...");
+                
+                inGameCutscene.startCutscene(InGameCutscene.CutsceneType.OBJECTIVE_CHANGE, () -> {
+                    // After objective change, start TUTORIAL for injured/bandage minigame
+                    // Player "wakes up" injured and must learn how to bandage themselves
+                    System.out.println("[PlayScreen] Starting injured minigame TUTORIAL (no health loss)...");
+                    
+                    // Start tutorial injured minigame
+                    startInjuredMinigameTutorial();
+                });
+            });
+        }
+    }
+    
+    /**
+     * Start injured minigame as a TUTORIAL (after gym encounter cutscene).
+     * This teaches the player how to use the bandage mechanic without losing health.
+     */
+    private void startInjuredMinigameTutorial() {
+        System.out.println("[Tutorial] Injured minigame tutorial started - player learns bandage mechanic");
+        
+        // Start the injured minigame with tutorial mode enabled (easier + no real penalty)
+        injuredMinigame.start(
+            // On success callback
+            () -> {
+                System.out.println("[Tutorial] Player completed injured minigame tutorial!");
+                onInjuredTutorialComplete();
+            },
+            // On fail callback - in tutorial, let them retry without penalty
+            () -> {
+                System.out.println("[Tutorial] Player failed tutorial - letting them retry...");
+                // Restart tutorial immediately (no penalty)
+                startInjuredMinigameTutorial();
+            },
+            true  // Tutorial mode - longer time, slower decay
+        );
+    }
+    
+    /**
+     * Called when player completes the injured minigame tutorial.
+     * Transitions to full PLAYING state.
+     */
+    private void onInjuredTutorialComplete() {
+        System.out.println("[Tutorial] Injured tutorial complete - transitioning to full gameplay");
+        
+        GameManager gm = GameManager.getInstance();
+        gm.transitionToFullPlayMode();
+        
+        // Show a brief message
+        showFloatingMessage("Kamu sudah belajar cara membalut luka!");
+        
+        // Now Josh can hunt the player
+        // RoomDirector will start spawning Josh
+    }
+    
+    /**
+     * Restore consumed exit_key trigger states when entering a room.
+     * This ensures triggers that were already used don't re-trigger.
+     */
+    private void restoreConsumedExitKeyTriggers(RoomId roomId) {
+        if (tiledMapManager == null) return;
+        
+        KeyManager keyMgr = KeyManager.getInstance();
+        java.util.Set<Integer> consumedIds = keyMgr.getConsumedTriggerIdsForRoom(roomId);
+        
+        if (consumedIds.isEmpty()) return;
+        
+        System.out.println("[ExitKeyTrigger] Restoring " + consumedIds.size() + 
+            " consumed triggers for room " + roomId);
+        
+        for (int objectId : consumedIds) {
+            tiledMapManager.markTriggerConsumed(objectId);
+        }
+    }
+    
+    /**
+     * Handle TMX exit_key trigger zones.
+     * These are INVISIBLE trigger areas that grant keys when player overlaps them.
+     * Keys are NOT rendered physically - they appear in inventory after trigger activation.
+     * 
+     * TRIGGER LOGIC:
+     * - locker_key: Granted directly when player overlaps trigger in Class1A
+     * - janitor_key: Granted when player overlaps trigger in Hallway IF player has locker_key (consumes it)
+     * - gym_key: Granted when player overlaps trigger in Janitor room IF player has janitor_key (consumes it)
+     */
+    private void checkExitKeyTriggers() {
+        if (tiledMapManager == null) return;
+        
+        GameManager gm = GameManager.getInstance();
+        KeyManager keyMgr = KeyManager.getInstance();
+        
+        // === TUTORIAL STATE RESTRICTION ===
+        // During tutorial state, don't allow key triggers
+        if (gm.isInTutorialState()) {
+            return;
+        }
+        
+        // Check if player overlaps any exit_key trigger zone
+        Rectangle playerBounds = player.getFootBounds();
+        TiledMapManager.ExitKeyTrigger trigger = tiledMapManager.checkExitKeyTrigger(playerBounds);
+        
+        if (trigger == null) return;
+        
+        // Check if this trigger was already consumed (persistent tracking)
+        if (keyMgr.isExitKeyTriggerConsumed(currentRoomId, trigger.objectId)) {
+            trigger.consumed = true; // Sync local state
+            return;
+        }
+        
+        String itemType = trigger.itemType.toLowerCase();
+        Inventory inventory = gm.getInventory();
+        
+        System.out.println("[ExitKeyTrigger] Player overlapping trigger: " + itemType + 
+            " in room=" + currentRoomId + " objectId=" + trigger.objectId);
+        
+        // === LOCKER_KEY TRIGGER (Class1A) ===
+        // No requirements - just grant the key
+        if (itemType.equals("locker_key")) {
+            if (!keyMgr.hasLockerKey()) {
+                KeyItem keyItem = new KeyItem(KeyItem.KeyType.LOCKER_KEY);
+                if (inventory.addItem(keyItem)) {
+                    // Mark trigger as consumed (local + persistent)
+                    tiledMapManager.consumeExitKeyTrigger(trigger);
+                    keyMgr.markExitKeyTriggerConsumed(currentRoomId, trigger.objectId);
+                    
+                    showFloatingMessage("Dapat: Kunci Loker!");
+                    System.out.println("[ExitKeyTrigger] Granted LOCKER_KEY");
+                } else {
+                    showFloatingMessage("Tas penuh!");
+                }
+            }
+            return;
+        }
+        
+        // === JANITOR_KEY TRIGGER (Hallway) ===
+        // REQUIRES: locker_key in inventory (will be consumed)
+        if (itemType.equals("janitor_key")) {
+            if (keyMgr.hasJanitorKey()) {
+                return; // Already have it
+            }
+            
+            if (!keyMgr.hasLockerKey()) {
+                // Player doesn't have required key - show hint
+                showFloatingMessage("Loker ini butuh kunci...");
+                System.out.println("[ExitKeyTrigger] janitor_key trigger blocked - missing LOCKER_KEY");
+                return;
+            }
+            
+            // Player has locker_key - consume it and grant janitor_key
+            KeyItem janitorKey = new KeyItem(KeyItem.KeyType.JANITOR_KEY);
+            if (inventory.addItem(janitorKey)) {
+                // Consume locker_key from inventory
+                keyMgr.useKey(KeyItem.KeyType.LOCKER_KEY);
+                keyMgr.unlockSpecialLocker();
+                
+                // Mark trigger as consumed (local + persistent)
+                tiledMapManager.consumeExitKeyTrigger(trigger);
+                keyMgr.markExitKeyTriggerConsumed(currentRoomId, trigger.objectId);
+                
+                showFloatingMessage("Pakai Kunci Loker! Dapat: Kunci Ruang Penjaga!");
+                System.out.println("[ExitKeyTrigger] Consumed LOCKER_KEY, granted JANITOR_KEY");
+            } else {
+                showFloatingMessage("Tas penuh!");
+            }
+            return;
+        }
+        
+        // === GYM_KEY TRIGGER (Janitor Room) ===
+        // No requirements - just grant the key (same concept as locker_key)
+        if (itemType.equals("gym_key")) {
+            if (!keyMgr.hasGymKey()) {
+                KeyItem gymKey = new KeyItem(KeyItem.KeyType.GYM_KEY);
+                if (inventory.addItem(gymKey)) {
+                    // Mark trigger as consumed (local + persistent)
+                    tiledMapManager.consumeExitKeyTrigger(trigger);
+                    keyMgr.markExitKeyTriggerConsumed(currentRoomId, trigger.objectId);
+                    
+                    showFloatingMessage("Dapat: Kunci Pintu Belakang Gym!");
+                    System.out.println("[ExitKeyTrigger] Granted GYM_KEY");
+                } else {
+                    showFloatingMessage("Tas penuh!");
+                }
+            }
+            return;
+        }
+        
+        // Unknown trigger type
+        System.out.println("[ExitKeyTrigger] Unknown trigger item type: " + itemType);
+    }
+    
+    /**
+     * Auto-trigger key usage based on proximity to locked DOORS.
+     * Called every frame to check if player is near a locked door that matches a key in inventory.
+     * Keys are used AUTOMATICALLY when player walks near the correct locked door.
+     * 
+     * NOTE: This is SEPARATE from exit_key triggers - this handles door unlocking.
+     */
+    private void checkAutoKeyTrigger() {
+        if (tiledMapManager == null || !tiledMapManager.hasCurrentMap()) return;
+        
+        GameManager gm = GameManager.getInstance();
+        KeyManager keyMgr = KeyManager.getInstance();
+        
+        // Don't auto-trigger during tutorial state
+        if (gm.isInTutorialState()) return;
+        
+        // Check for nearby doors/triggers using TMX object layer
+        TiledMapManager.DoorInfo doorInfo = tiledMapManager.getDoorAt(
+            player.getFootBounds().x, player.getFootBounds().y,
+            player.getFootBounds().width, player.getFootBounds().height);
+        
+        // NOTE: Key granting (locker_key → janitor_key → gym_key) is now handled by
+        // checkExitKeyTriggers() via TMX exit_key object layer.
+        // This method only handles DOOR UNLOCKING with keys already in inventory.
+        
+        // === AUTO-TRIGGER: JANITOR_KEY → JANITOR_DOOR ===
+        // If player has janitor_key and is near janitor room door
+        if (keyMgr.hasJanitorKey() && !keyMgr.isJanitorRoomUnlocked()) {
+            if (doorInfo != null && doorInfo.targetRoom != null &&
+                doorInfo.targetRoom.equalsIgnoreCase("JANITOR")) {
+                // AUTO-USE janitor_key to unlock door (key already consumed by exit_key trigger)
+                System.out.println("[AutoKey] Unlocking janitor door with JANITOR_KEY...");
+                keyMgr.unlockJanitorRoom();
+                
+                showFloatingMessage("Ruang Penjaga terbuka!");
+                return;
+            }
+        }
+        
+        // === AUTO-TRIGGER: GYM_KEY → GYM_BACK_DOOR ===
+        // If player has gym_key and is near gym back door
+        if (keyMgr.hasGymKey() && !keyMgr.isGymBackDoorUnlocked()) {
+            if (doorInfo != null && doorInfo.doorName != null &&
+                doorInfo.doorName.toLowerCase().contains("gym_back")) {
+                // AUTO-USE gym_key
+                System.out.println("[AutoKey] Using GYM_KEY at gym back door...");
+                keyMgr.unlockGymBackDoor();
+                
+                // Don't remove gym_key (keep for story)
+                showFloatingMessage("Pintu Belakang Gym terbuka! Waktunya kabur...");
+                return;
+            }
+        }
+    }
 
     /**
-     * Update RoomDirector and handle enemy spawning
+     * Update RoomDirector and handle enemy spawning via JoshSpawnController
+     * 
+     * NEW SYSTEM: Uses context-aware JoshSpawnController for intelligent spawning
+     * - Josh only spawns in SAME room as player
+     * - Spawn positions come from TMX josh_spawn objects
+     * - Spawn is conditional (cooldown + chance + context)
      */
     private void updateRoomDirector(float delta) {
         GameManager gm = GameManager.getInstance();
         RoomDirector rd = gm.getRoomDirector();
+        JoshSpawnController spawnController = gm.getJoshSpawnController();
 
         if (rd == null)
             return;
+            
+        // Register this PlayScreen as the event listener for camera shake etc.
+        if (rd.getEventListener() == null) {
+            rd.setEventListener(this);
+        }
+        
+        // Update spawn controller timer
+        if (spawnController != null) {
+            spawnController.update(delta);
+        }
 
-        // Don't update RoomDirector if player is captured (freeze enemy behavior)
-        if (!playerFullyCaptured) {
-            // Update RoomDirector logic (abstract mode movement, grace period, etc.)
+        // Don't update if player is injured (freeze enemy behavior)
+        if (!playerFullyInjured) {
+            // Update RoomDirector logic (for audio cues and proximity tracking)
             rd.update(delta);
 
-            // Check if enemy should spawn physically
-            if (rd.isEnemyPhysicallyPresent() && josh == null) {
-                // Spawn enemy at door position
-                spawnEnemyPhysically(rd);
+            // === NEW CONTEXT-AWARE SPAWN SYSTEM ===
+            // Use JoshSpawnController instead of RoomDirector for spawning
+            if (josh == null && spawnController != null) {
+                // Determine if spawning is allowed (not during cutscene/minigame/tutorial)
+                boolean canSpawn = gm.isPlaying() && 
+                                   !injuredMinigame.isActive() && 
+                                   !escapeMinigameActive &&
+                                   (inGameCutscene == null || !inGameCutscene.isActive());
+                
+                JoshSpawnController.SpawnDecision decision = spawnController.shouldSpawnJosh(
+                    tiledMapManager,
+                    player.getCenterX(),
+                    player.getCenterY(),
+                    canSpawn
+                );
+                
+                if (decision.shouldSpawn) {
+                    // Spawn Josh at the selected position
+                    spawnEnemyAtPosition(decision.spawnX, decision.spawnY);
+                    spawnController.onJoshSpawned(currentRoomId);
+                    
+                    System.out.println("[JoshSpawn] ✅ " + decision.reason + 
+                        " at (" + (int)decision.spawnX + ", " + (int)decision.spawnY + ")");
+                } else if (com.fearjosh.frontend.config.Constants.DEBUG_ROOM_DIRECTOR) {
+                    // Debug: show why spawn was blocked (only occasionally to avoid spam)
+                    if (Math.random() < 0.01) { // 1% chance to log
+                        System.out.println("[JoshSpawn] ❌ " + decision.reason);
+                    }
+                }
             }
         }
 
-        // Update physical enemy if present (but not if player is captured)
-        if (josh != null && !josh.isDespawned() && !playerFullyCaptured) {
-            josh.update(player, currentRoom, delta);
+        // Update physical enemy if present (but not if player is injured)
+        if (josh != null && !josh.isDespawned() && !playerFullyInjured) {
+            josh.update(player, delta);
+            
+            // Notify spawn controller when Josh is chasing
+            if (spawnController != null && 
+                josh.getCurrentStateType() == com.fearjosh.frontend.state.enemy.EnemyStateType.CHASING) {
+                spawnController.onPlayerChased();
+            }
 
             // === MONSTER PROXIMITY SOUND ===
             // Calculate distance from monster to player
@@ -745,28 +1188,28 @@ public class PlayScreen implements Screen {
                 }
             }
 
-            // Check collision with player (CAPTURE SYSTEM)
+            // Check collision with player (INJURY SYSTEM)
             if (checkEnemyPlayerCollision(josh, player)) {
-                if (!playerBeingCaught && !playerFullyCaptured) {
-                    // Mulai capture timer
+                if (!playerBeingCaught && !playerFullyInjured) {
+                    // Start injury timer
                     playerBeingCaught = true;
-                    captureTimer = 0f;
-                    System.out.println("[CAPTURE] Josh menangkap player! Timer dimulai...");
+                    injuryTimer = 0f;
+                    System.out.println("[INJURY] Josh caught player! Timer started...");
                 } else if (playerBeingCaught) {
-                    // Update capture timer
-                    captureTimer += delta;
+                    // Update injury timer
+                    injuryTimer += delta;
 
-                    if (captureTimer >= CAPTURE_DELAY) {
-                        // Player benar-benar tertangkap setelah 2 detik
-                        triggerPlayerCaptured();
+                    if (injuryTimer >= INJURY_DELAY) {
+                        // Player is injured after 2 seconds
+                        triggerPlayerInjured();
                     }
                 }
             } else {
-                // Player berhasil lepas sebelum 2 detik
-                if (playerBeingCaught && !playerFullyCaptured) {
-                    System.out.println("[CAPTURE] Player berhasil lepas dari Josh!");
+                // Player escaped before 2 seconds
+                if (playerBeingCaught && !playerFullyInjured) {
+                    System.out.println("[INJURY] Player escaped from Josh!");
                     playerBeingCaught = false;
-                    captureTimer = 0f;
+                    injuryTimer = 0f;
                 }
             }
 
@@ -776,46 +1219,76 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Update capture phase timer and transition
-        if (playerFullyCaptured) {
-            capturePhaseTimer += delta;
+        // Update injury phase timer and transition
+        if (playerFullyInjured) {
+            injuryPhaseTimer += delta;
 
             // Fade in overlay during first 1.5 seconds
-            if (captureTransitionAlpha < 1f && capturePhaseTimer < CAPTURE_TRANSITION_DURATION) {
-                captureTransitionAlpha += delta / CAPTURE_TRANSITION_DURATION;
-                if (captureTransitionAlpha > 1f) {
-                    captureTransitionAlpha = 1f;
+            if (injuryTransitionAlpha < 1f && injuryPhaseTimer < INJURY_TRANSITION_DURATION) {
+                injuryTransitionAlpha += delta / INJURY_TRANSITION_DURATION;
+                if (injuryTransitionAlpha > 1f) {
+                    injuryTransitionAlpha = 1f;
                 }
             }
         }
 
-        // Update escape minigame
+        // Update injured minigame (new system)
+        if (injuredMinigame.isActive()) {
+            injuredMinigame.update(delta);
+        }
+
+        // Update escape minigame (legacy)
         if (escapeMinigameActive) {
             updateEscapeMinigame(delta);
         }
     }
 
     /**
-     * Triggered when player has been caught for 2 seconds
+     * Triggered when player has been caught for 2 seconds - player becomes injured
+     * Now triggers CAPTURE JUMPSCARE before transitioning to injured state
      */
-    private void triggerPlayerCaptured() {
-        if (playerFullyCaptured)
-            return; // Already captured
+    private void triggerPlayerInjured() {
+        if (playerFullyInjured)
+            return; // Already injured
 
-        playerFullyCaptured = true;
+        // Mark as caught to prevent duplicate triggers
         playerBeingCaught = false;
+        
+        System.out.println("[CAPTURE] Josh caught player! Triggering capture jumpscare...");
+        
+        // Trigger capture jumpscare FIRST, then execute actual injury logic in callback
+        JumpscareManager.getInstance().triggerCaptureJumpscare(() -> {
+            // This callback runs AFTER the jumpscare finishes
+            executePlayerInjuredState();
+        });
+    }
+    
+    /**
+     * Actually execute the injured state transition (called after capture jumpscare)
+     */
+    private void executePlayerInjuredState() {
+        if (playerFullyInjured)
+            return; // Double-check in case of race condition
+            
+        playerFullyInjured = true;
 
-        System.out.println("[GAME OVER] Josh caught you! Player terikat.");
+        System.out.println("[INJURED] Jumpscare complete. Player is now injured.");
 
-        // Set player state to captured
-        player.setState(com.fearjosh.frontend.state.player.CapturedState.getInstance());
-        player.setCaptured(true);
+        // Set player state to injured
+        player.setState(com.fearjosh.frontend.state.player.InjuredState.getInstance());
+        player.setInjured(true);
 
-        // Kurangi nyawa
+        // Lose a life
         GameManager gm = GameManager.getInstance();
         gm.loseLife();
 
         System.out.println("[LIVES] Remaining lives: " + gm.getCurrentLives());
+        
+        // Notify JoshSpawnController that player was caught
+        JoshSpawnController spawnController = gm.getJoshSpawnController();
+        if (spawnController != null) {
+            spawnController.onPlayerCaught();
+        }
 
         // Check if game over (no lives left)
         if (gm.getCurrentLives() <= 0) {
@@ -823,15 +1296,19 @@ public class PlayScreen implements Screen {
             return; // Don't do retreat if game over
         }
 
-        // Make Josh retreat to another room (give player time to escape)
+        // Make Josh retreat to another room (give player time to bandage)
         if (josh != null) {
             RoomDirector rd = gm.getRoomDirector();
             if (rd != null) {
                 rd.onEnemyDespawn();
                 rd.forceEnemyRetreat();
             }
+            // Notify spawn controller that Josh retreated
+            if (spawnController != null) {
+                spawnController.onJoshRetreated();
+            }
             josh = null; // Despawn physical enemy
-            System.out.println("[CAPTURE] Josh retreated to another room. Player has time to escape!");
+            System.out.println("[INJURED] Josh retreated to another room. Player has time to bandage!");
         }
     }
 
@@ -881,13 +1358,51 @@ public class PlayScreen implements Screen {
         System.out.println("[PlayScreen] Enemy size: " + enemyW + "x" + enemyH +
                 ", state: " + josh.getCurrentStateType());
     }
+    
+    /**
+     * Spawn enemy at specific position (used by JoshSpawnController)
+     * NEW CONTEXT-AWARE SPAWN METHOD
+     * 
+     * @param x X position to spawn at (from TMX josh_spawn)
+     * @param y Y position to spawn at (from TMX josh_spawn)
+     */
+    private void spawnEnemyAtPosition(float x, float y) {
+        // Josh size = 2x player size (menakutkan!)
+        float playerW = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_WIDTH;
+        float playerH = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_HEIGHT;
+
+        float enemyW = playerW * 2f;
+        float enemyH = playerH * 2f;
+        
+        // Center enemy on spawn point
+        float spawnX = x - enemyW / 2f;
+        float spawnY = y - enemyH / 2f;
+        
+        josh = new Enemy(spawnX, spawnY, enemyW, enemyH);
+        
+        // Set TiledMapManager for TMX collision detection
+        josh.setTiledMapManager(tiledMapManager);
+        
+        System.out.println("[PlayScreen] ✅ Enemy spawned via JoshSpawnController at (" + 
+            (int)spawnX + ", " + (int)spawnY + "), size: " + enemyW + "x" + enemyH);
+    }
 
     // ======================
     // INPUT & MOVEMENT (via InputHandler + Command Pattern)
     // ======================
 
     private void handleInput(float delta) {
-        // If minigame is active, only handle spacebar
+        // If injured minigame is active, only handle spacebar
+        if (injuredMinigame.isActive()) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                injuredMinigame.onSpacebarPressed();
+                AudioManager.getInstance().playSound("Audio/Effect/cut_rope_sound_effect.wav");
+                System.out.println("[MINIGAME] Space pressed for bandaging!");
+            }
+            return; // Block all other input during injured minigame
+        }
+        
+        // Legacy escape minigame - only handle spacebar
         if (escapeMinigameActive) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
                 escapeProgress += ESCAPE_PROGRESS_PER_PRESS;
@@ -906,13 +1421,13 @@ public class PlayScreen implements Screen {
             return; // Don't process other input during minigame
         }
 
-        // If player is captured (but minigame not started), only handle F key
-        if (playerFullyCaptured && capturePhaseTimer >= CAPTURE_PHASE_DURATION) {
+        // If player is injured (but minigame not started), only handle F key
+        if (playerFullyInjured && injuryPhaseTimer >= INJURY_PHASE_DURATION && !injuredMinigame.isActive()) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.F)) {
-                System.out.println("[CAPTURE] Player pressed F! Starting escape minigame...");
-                startEscapeMinigame();
+                System.out.println("[INJURED] Player pressed F! Starting bandage minigame...");
+                startInjuredMinigame();
             }
-            return; // Don't process any other input when captured
+            return; // Don't process any other input when injured
         }
 
         // 1. Poll input dan execute commands via InputHandler
@@ -1021,16 +1536,19 @@ public class PlayScreen implements Screen {
     // ========================
 
     /**
-     * COLLISION ENEMY: Pakai BODY HITBOX player (full body)
-     * Enemy menangkap player jika kena bagian mana pun dari body
+     * COLLISION ENEMY: Pakai BODY HITBOX (full body) untuk KEDUA entity
+     * - Player: bodyBounds (full body untuk collision dengan enemy)
+     * - Enemy: bodyBounds (full body untuk capture detection)
+     * 
+     * Enemy menangkap player jika BODY hitbox overlap
+     * (FOOT hitbox digunakan untuk world collision, bukan capture)
      */
     private boolean checkEnemyPlayerCollision(Enemy enemy, Player player) {
-        // GUNAKAN BODY HITBOX (full body, bukan foot!)
+        // GUNAKAN BODY HITBOX untuk kedua entity (full body, bukan foot!)
         com.badlogic.gdx.math.Rectangle playerBody = player.getBodyBounds();
-        com.badlogic.gdx.math.Rectangle enemyBounds = new com.badlogic.gdx.math.Rectangle(
-                enemy.getX(), enemy.getY(), enemy.getWidth(), enemy.getHeight());
+        com.badlogic.gdx.math.Rectangle enemyBody = enemy.getBodyBounds();
 
-        return playerBody.overlaps(enemyBounds);
+        return playerBody.overlaps(enemyBody);
     }
 
     private void clampEnemyToRoom(Enemy enemy) {
@@ -1055,6 +1573,9 @@ public class PlayScreen implements Screen {
     }
 
     private void checkRoomTransition() {
+        GameManager gm = GameManager.getInstance();
+        KeyManager keyMgr = KeyManager.getInstance();
+        
         // === TMX DOOR TRANSITION ===
         // Check if player is on a door object defined in the TMX map
         if (tiledMapManager.hasCurrentMap()) {
@@ -1063,10 +1584,93 @@ public class PlayScreen implements Screen {
                     footBounds.x, footBounds.y, footBounds.width, footBounds.height);
 
             if (tmxDoorDestination != null && tmxDoorDestination != currentRoomId) {
+                // Get door info for checking special doors
+                com.fearjosh.frontend.render.TiledMapManager.DoorInfo doorInfo = tiledMapManager.getDoorAt(
+                        footBounds.x, footBounds.y, footBounds.width, footBounds.height);
+                
+                // === SPECIAL DOOR CHECKS FOR KEY-BASED PROGRESSION ===
+                
+                // MAIN EXIT LOCKED - After meeting Josh, the main exit (hallway -> lobby) is locked
+                // This forces player to find alternative escape route (key progression)
+                if (currentRoomId == RoomId.HALLWAY && tmxDoorDestination == RoomId.LOBBY && gm.hasMetJosh()) {
+                    showFloatingMessage("Akh terkunci! Aku harus cari jalan lain...");
+                    transitionCooldown = TRANSITION_COOLDOWN_DURATION;
+                    System.out.println("[PlayScreen] MAIN EXIT LOCKED - Player must find alternative route!");
+                    return;
+                }
+                
+                // GYM back door - requires gym_key to escape
+                if (doorInfo != null && doorInfo.doorName != null && 
+                    doorInfo.doorName.toLowerCase().contains("gym_back")) {
+                    if (gm.isObjectiveEscape()) {
+                        // Check if player has gym key
+                        if (keyMgr.hasGymKey()) {
+                            // TRIGGER ENDING - Player escapes!
+                            System.out.println("[PlayScreen] GYM BACK DOOR - Player escapes! Triggering ending...");
+                            triggerGoodEnding();
+                            return;
+                        } else {
+                            showFloatingMessage("Pintunya terkunci. Aku butuh kunci...");
+                            transitionCooldown = TRANSITION_COOLDOWN_DURATION;
+                            return;
+                        }
+                    } else {
+                        showFloatingMessage("Terkunci dari luar...");
+                        transitionCooldown = TRANSITION_COOLDOWN_DURATION;
+                        return;
+                    }
+                }
+                
+                // Janitor room - requires janitor_key
+                if (tmxDoorDestination == RoomId.JANITOR && !keyMgr.isJanitorRoomUnlocked()) {
+                    // Check if player has janitor key
+                    if (keyMgr.hasJanitorKey()) {
+                        // Unlock janitor room
+                        keyMgr.unlockJanitorRoom();
+                        showFloatingMessage("Ruang penjaga terbuka!");
+                        System.out.println("[PlayScreen] Janitor room unlocked with janitor_key!");
+                        // Continue to allow transition
+                    } else {
+                        showFloatingMessage("Ruang penjaga terkunci. Aku butuh kunci...");
+                        transitionCooldown = TRANSITION_COOLDOWN_DURATION;
+                        return;
+                    }
+                }
+                
+                // === STORY MODE RESTRICTIONS ===
+                // During STORY state, only allow certain rooms
+                if (gm.getCurrentState() == GameManager.GameState.STORY && !gm.hasMetJosh()) {
+                    // During story, most doors are "locked" until player reaches gym
+                    // Allow: LOBBY -> HALLWAY -> CLASS_1A -> back to HALLWAY -> GYM
+                    boolean allowedTransition = false;
+                    
+                    // Allow transitions on the main story path
+                    if (currentRoomId == RoomId.LOBBY && tmxDoorDestination == RoomId.HALLWAY) {
+                        allowedTransition = true;
+                    } else if (currentRoomId == RoomId.HALLWAY) {
+                        // From hallway, allow going to CLASS_1A, GYM, or back to LOBBY
+                        if (tmxDoorDestination == RoomId.CLASS_1A || 
+                            tmxDoorDestination == RoomId.GYM || 
+                            tmxDoorDestination == RoomId.LOBBY) {
+                            allowedTransition = true;
+                        }
+                    } else if (currentRoomId == RoomId.CLASS_1A && tmxDoorDestination == RoomId.HALLWAY) {
+                        allowedTransition = true;
+                    } else if (currentRoomId == RoomId.GYM && tmxDoorDestination == RoomId.HALLWAY) {
+                        allowedTransition = true;
+                    }
+                    
+                    if (!allowedTransition) {
+                        showFloatingMessage("Aku harus menjelajahi area utama dulu...");
+                        transitionCooldown = TRANSITION_COOLDOWN_DURATION;
+                        return;
+                    }
+                }
+                
                 // Check if destination room has a TMX map
                 if (!tiledMapManager.hasMapForRoom(tmxDoorDestination)) {
                     // Room not implemented yet - show locked message
-                    showFloatingMessage("It's locked...");
+                    showFloatingMessage("Terkunci...");
                     transitionCooldown = TRANSITION_COOLDOWN_DURATION;
                     return;
                 }
@@ -1075,10 +1679,6 @@ public class PlayScreen implements Screen {
 
                 float roomW = getRoomWidth();
                 float roomH = getRoomHeight();
-
-                // Get door info for positioning
-                com.fearjosh.frontend.render.TiledMapManager.DoorInfo doorInfo = tiledMapManager.getDoorAt(footBounds.x,
-                        footBounds.y, footBounds.width, footBounds.height);
 
                 // Determine which wall the door is on (for spawn positioning in new room)
                 String doorWall = determineDoorWall(doorInfo, roomW, roomH);
@@ -1308,11 +1908,11 @@ public class PlayScreen implements Screen {
      * Handle inventory-related input:
      * - Number keys (1-7) to select slots
      * - Q key to use selected item
-     * Disabled when player is captured
+     * Disabled when player is injured
      */
     private void handleInventoryInput() {
-        // Don't allow inventory input when captured
-        if (playerFullyCaptured) {
+        // Don't allow inventory input when injured
+        if (playerFullyInjured) {
             return;
         }
 
@@ -1343,7 +1943,18 @@ public class PlayScreen implements Screen {
                     + (selectedItem != null ? selectedItem.getName() : "null"));
 
             if (selectedItem != null) {
-                if (selectedItem.isUsable()) {
+                // Handle KeyItem usage separately (keys are not "usable" but can be used near appropriate objects)
+                if (selectedItem instanceof KeyItem) {
+                    KeyItem keyItem = (KeyItem) selectedItem;
+                    boolean keyUsed = tryUseKeyOnNearbyObject(keyItem);
+                    if (keyUsed) {
+                        // Remove key from inventory after use
+                        inventory.removeItem(inventory.getSelectedSlot());
+                        System.out.println("[Inventory] Key used and removed: " + keyItem.getName());
+                    } else {
+                        showFloatingMessage("Tidak ada benda terkunci di dekat sini...");
+                    }
+                } else if (selectedItem.isUsable()) {
                     boolean success = selectedItem.useItem();
                     System.out.println("[Inventory] Item use result: " + success);
                     if (success) {
@@ -1373,71 +1984,87 @@ public class PlayScreen implements Screen {
         }
     }
 
-    // ======================
-    // INTERACTION
-    // ======================
-
-    private void findCurrentInteractable() {
-        currentInteractable = null;
-        float bestDist2 = Float.MAX_VALUE;
-
-        float px = player.getCenterX();
-        float py = player.getCenterY();
-
-        for (Interactable inter : currentRoom.getInteractables()) {
-            if (!inter.isActive() || !inter.canInteract(player))
-                continue;
-
-            float dx = inter.getCenterX() - px;
-            float dy = inter.getCenterY() - py;
-            float dist2 = dx * dx + dy * dy;
-
-            if (dist2 < bestDist2 && dist2 <= INTERACT_RANGE * INTERACT_RANGE) {
-                bestDist2 = dist2;
-                currentInteractable = inter;
-            }
-        }
-        // Lockers are now handled via TMX tile interactables
-    }
-
-    private void handleInteractInput() {
-        if (currentInteractable != null &&
-                currentInteractable.isActive() &&
-                Gdx.input.isKeyJustPressed(Input.Keys.E)) {
-
-            System.out.println("[Interact] Interacting with: " + currentInteractable.getClass().getSimpleName());
-
-            InteractionResult result = currentInteractable.interact();
-            if (result != null) {
-                System.out.println("[Interact] Result - BatteryDelta: " + result.getBatteryDelta() + ", HasItem: "
-                        + result.hasItem());
-
-                // Legacy: direct battery recharge (for backward compatibility)
-                if (result.getBatteryDelta() > 0) {
-                    battery = Math.min(BATTERY_MAX, battery + result.getBatteryDelta());
-                    System.out.println("[Interact] Direct battery recharge: " + result.getBatteryDelta());
+    /**
+     * Try to use a key on a nearby locked object.
+     * @param keyItem The key to use
+     * @return true if the key was successfully used, false otherwise
+     */
+    private boolean tryUseKeyOnNearbyObject(KeyItem keyItem) {
+        KeyManager keyMgr = KeyManager.getInstance();
+        Inventory inv = GameManager.getInstance().getInventory();
+        KeyItem.KeyType keyType = keyItem.getKeyType();
+        
+        // Check for nearby doors/locked objects based on key type
+        switch (keyType) {
+            case LOCKER_KEY:
+                // Check if near special locker and it's not opened yet
+                if (currentTileInteractable != null && 
+                    currentTileInteractable.type.equals("special_locker") &&
+                    !keyMgr.isSpecialLockerUnlocked()) {
+                    keyMgr.unlockSpecialLocker();
+                    showFloatingMessage("Loker khusus terbuka! Ada kunci di dalamnya...");
+                    // Add janitor key to inventory
+                    inv.addItem(new KeyItem(KeyItem.KeyType.JANITOR_KEY));
+                    return true;
                 }
-
-                // NEW: Add item to inventory
-                if (result.hasItem()) {
-                    GameManager gm = GameManager.getInstance();
-                    Inventory inventory = gm.getInventory();
-                    System.out.println("[Interact] Attempting to add item: " + result.getItem().getName());
-                    boolean added = inventory.addItem(result.getItem());
-                    if (added) {
-                        System.out.println("[Inventory] Picked up " + result.getItem().getName());
-                    } else {
-                        System.out.println("[Inventory] Full! Cannot pick up " + result.getItem().getName());
+                // Also check TMX doors
+                if (tiledMapManager != null && tiledMapManager.hasCurrentMap()) {
+                    TiledMapManager.DoorInfo doorInfo = tiledMapManager.getDoorAt(
+                        player.getFootBounds().x, player.getFootBounds().y,
+                        player.getFootBounds().width, player.getFootBounds().height);
+                    if (doorInfo != null && doorInfo.doorName != null &&
+                        doorInfo.doorName.toLowerCase().contains("special_locker")) {
+                        keyMgr.unlockSpecialLocker();
+                        showFloatingMessage("Loker khusus terbuka! Ada kunci di dalamnya...");
+                        inv.addItem(new KeyItem(KeyItem.KeyType.JANITOR_KEY));
+                        return true;
                     }
                 }
-            } else {
-                System.out.println("[Interact] Result is null");
-            }
+                break;
+                
+            case JANITOR_KEY:
+                // Check if near janitor room door and it's not opened yet
+                if (!keyMgr.isJanitorRoomUnlocked()) {
+                    if (tiledMapManager != null && tiledMapManager.hasCurrentMap()) {
+                        TiledMapManager.DoorInfo doorInfo = tiledMapManager.getDoorAt(
+                            player.getFootBounds().x, player.getFootBounds().y,
+                            player.getFootBounds().width, player.getFootBounds().height);
+                        // Check if door leads to janitor room
+                        if (doorInfo != null && doorInfo.targetRoom != null &&
+                            doorInfo.targetRoom.equalsIgnoreCase("JANITOR")) {
+                            keyMgr.unlockJanitorRoom();
+                            showFloatingMessage("Ruang penjaga terbuka!");
+                            return true;
+                        }
+                    }
+                }
+                break;
+                
+            case GYM_KEY:
+                // Check if near gym back door
+                if (tiledMapManager != null && tiledMapManager.hasCurrentMap()) {
+                    TiledMapManager.DoorInfo doorInfo = tiledMapManager.getDoorAt(
+                        player.getFootBounds().x, player.getFootBounds().y,
+                        player.getFootBounds().width, player.getFootBounds().height);
+                    if (doorInfo != null && doorInfo.doorName != null &&
+                        doorInfo.doorName.toLowerCase().contains("gym_back")) {
+                        keyMgr.unlockGymBackDoor();
+                        showFloatingMessage("Pintu belakang gym terbuka! Saatnya kabur!");
+                        // Don't consume gym key - keep for story purposes
+                        return false; // Return false to not remove the key
+                    }
+                }
+                break;
+                
+            default:
+                break;
         }
+        
+        return false;
     }
 
     // ======================
-    // TILE INTERACTABLES (TMX Lockers)
+    // TILE INTERACTABLES (TMX-based only)
     // ======================
 
     /**
@@ -1463,6 +2090,7 @@ public class PlayScreen implements Screen {
 
     /**
      * Handle E key press for tile interactables (lockers)
+     * Keys are now picked up from exit_key layer automatically - this handles regular lockers only
      */
     private void handleTileInteractInput() {
         if (currentTileInteractable == null)
@@ -1473,28 +2101,85 @@ public class PlayScreen implements Screen {
             return;
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.E)) {
-            System.out.println("[TileInteract] Opening locker: " + currentTileInteractable.name +
+            GameManager gm = GameManager.getInstance();
+            
+            // === TUTORIAL STATE RESTRICTION ===
+            // During tutorial (STORY state before meeting Josh), block tile interactions
+            if (gm.isInTutorialState()) {
+                showFloatingMessage("Aku harus ke gym dulu...");
+                System.out.println("[TileInteract] Blocked in tutorial state - player must meet Josh first");
+                return;
+            }
+            
+            System.out.println("[TileInteract] Attempting to open: " + currentTileInteractable.name +
                     " type=" + currentTileInteractable.type);
 
             // Toggle the tile (open the locker visually)
             boolean toggled = tiledMapManager.toggleTileInteractable(currentTileInteractable);
 
             if (toggled) {
-                // Roll for loot!
-                Item loot = LockerLootTable.rollLoot();
-
-                if (loot != null) {
-                    GameManager gm = GameManager.getInstance();
-                    Inventory inventory = gm.getInventory();
-                    boolean added = inventory.addItem(loot);
-
-                    if (added) {
-                        System.out.println("[TileInteract] Found " + loot.getName() + " in locker!");
+                // Get inventory from GameManager
+                com.fearjosh.frontend.systems.Inventory playerInventory = gm.getInventory();
+                
+                // Determine what item to give (predefined or random)
+                String itemType;
+                if (currentTileInteractable.hasItem()) {
+                    // Use predefined item from TMX
+                    itemType = currentTileInteractable.containedItem.toLowerCase();
+                } else {
+                    // Random item system: 70% chance to find something
+                    double chance = Math.random();
+                    if (chance < 0.35) {
+                        itemType = "battery";
+                    } else if (chance < 0.70) {
+                        itemType = "chocolate";
                     } else {
-                        System.out.println("[TileInteract] Inventory full! " + loot.getName() + " was lost.");
+                        itemType = null; // Empty locker
+                    }
+                }
+                
+                if (itemType != null) {
+                    boolean itemGiven = false;
+                    
+                    switch (itemType) {
+                        case "battery":
+                            // Give battery to player's inventory
+                            BatteryItem batteryItem = new BatteryItem();
+                            if (playerInventory.addItem(batteryItem)) {
+                                showFloatingMessage("Dapat Baterai!");
+                                System.out.println("[TileInteract] Player found a Battery in the locker!");
+                                itemGiven = true;
+                            } else {
+                                showFloatingMessage("Tas penuh!");
+                            }
+                            break;
+                            
+                        case "chocolate":
+                            // Give chocolate to player's inventory
+                            ChocolateItem chocolateItem = new ChocolateItem();
+                            if (playerInventory.addItem(chocolateItem)) {
+                                showFloatingMessage("Dapat Cokelat!");
+                                System.out.println("[TileInteract] Player found Chocolate in the locker!");
+                                itemGiven = true;
+                            } else {
+                                showFloatingMessage("Tas penuh!");
+                            }
+                            break;
+                            
+                        default:
+                            showFloatingMessage("Dapat: " + itemType);
+                            System.out.println("[TileInteract] Found unknown item: " + itemType);
+                            itemGiven = true;
+                            break;
+                    }
+                    
+                    if (itemGiven) {
+                        currentTileInteractable.itemCollected = true;
                     }
                 } else {
-                    System.out.println("[TileInteract] Locker was empty.");
+                    // Locker is empty
+                    showFloatingMessage("Loker kosong...");
+                    System.out.println("[TileInteract] Opened locker - empty");
                 }
             }
         }
@@ -1649,11 +2334,11 @@ public class PlayScreen implements Screen {
 
     /**
      * Render inventory bar (7 slots) di bawah tengah screen (Minecraft-style)
-     * Hidden when player is captured
+     * Hidden when player is injured
      */
     private void renderInventory() {
-        // Don't render inventory when captured
-        if (playerFullyCaptured) {
+        // Don't render inventory when injured
+        if (playerFullyInjured) {
             return;
         }
 
@@ -1726,10 +2411,10 @@ public class PlayScreen implements Screen {
     }
 
     /**
-     * Render capture transition phase (first 5 seconds) - black background +
+     * Render injury transition phase (first 5 seconds) - black background +
      * overlay
      */
-    private void renderCaptureTransitionPhase() {
+    private void renderInjuryTransitionPhase() {
         uiCamera.update();
         shapeRenderer.setProjectionMatrix(uiCamera.combined);
         batch.setProjectionMatrix(uiCamera.combined);
@@ -1741,31 +2426,32 @@ public class PlayScreen implements Screen {
         shapeRenderer.end();
 
         // Draw transition overlay (josh_caught_you.jpg)
-        if (captureTransitionAlpha > 0f && captureTransitionTexture != null) {
+        if (injuryTransitionAlpha > 0f && injuryTransitionTexture != null) {
             batch.begin();
             Color c = batch.getColor();
-            batch.setColor(c.r, c.g, c.b, captureTransitionAlpha);
-            batch.draw(captureTransitionTexture, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+            batch.setColor(c.r, c.g, c.b, injuryTransitionAlpha);
+            batch.draw(injuryTransitionTexture, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
             batch.setColor(c.r, c.g, c.b, 1f);
             batch.end();
         }
     }
 
     /**
-     * Render capture transition overlay (josh_caught_you.jpg fade in)
+     * Render injury transition overlay (josh_caught_you.jpg fade in)
      */
-    private void renderCaptureTransition() {
-        if (captureTransitionTexture == null)
+    @SuppressWarnings("unused") // Reserved for injury animation feature
+    private void renderInjuryTransition() {
+        if (injuryTransitionTexture == null)
             return;
 
         batch.begin();
 
         // Set alpha for fade in effect
         Color c = batch.getColor();
-        batch.setColor(c.r, c.g, c.b, captureTransitionAlpha);
+        batch.setColor(c.r, c.g, c.b, injuryTransitionAlpha);
 
         // Draw fullscreen transition image
-        batch.draw(captureTransitionTexture, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        batch.draw(injuryTransitionTexture, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
         // Reset color
         batch.setColor(c.r, c.g, c.b, 1f);
@@ -1774,11 +2460,12 @@ public class PlayScreen implements Screen {
     }
 
     /**
-     * Render hint box for captured state ("Press F to get free")
+     * Render hint box for injured state ("Press F to bandage yourself")
      */
-    private void renderCaptureHintBox() {
+    @SuppressWarnings("unused") // Reserved for injury minigame UI
+    private void renderInjuryHintBox() {
         // Only show after transition is complete
-        if (captureTransitionAlpha < 1f)
+        if (injuryTransitionAlpha < 1f)
             return;
 
         // Draw hint box at bottom center of screen
@@ -1808,12 +2495,12 @@ public class PlayScreen implements Screen {
 
         // Calculate text centering
         com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
-        layout.setText(font, "Press F to get free");
+        layout.setText(font, "Tekan F untuk melepaskan diri!");
 
         float textX = boxX + (boxWidth - layout.width) / 2f;
         float textY = boxY + (boxHeight + layout.height) / 2f;
 
-        font.draw(batch, "Press F to get free", textX, textY);
+        font.draw(batch, "Tekan F untuk melepaskan diri!", textX, textY);
         batch.end();
     }
 
@@ -1865,32 +2552,47 @@ public class PlayScreen implements Screen {
         monsterGruntTimer = 0f;
         monsterRoarTimer = 0f;
 
-        // Reset capture state for new game
+        // Reset injury state for new game
         playerBeingCaught = false;
-        playerFullyCaptured = false;
-        captureTimer = 0f;
-        captureTransitionAlpha = 0f;
+        playerFullyInjured = false;
+        injuryTimer = 0f;
+        injuryTransitionAlpha = 0f;
 
-        System.out.println("[PlayScreen.show()] Capture state reset - playerFullyCaptured: " + playerFullyCaptured);
+        System.out.println("[PlayScreen.show()] Injury state reset - playerFullyInjured: " + playerFullyInjured);
 
-        // Ensure player is not in captured state
+        // Ensure player is not in injured state
         if (player != null) {
-            player.setCaptured(false);
-            // Reset to normal state if currently captured
-            if (player.getCurrentState() instanceof com.fearjosh.frontend.state.player.CapturedState) {
+            player.setInjured(false);
+            // Reset to normal state if currently injured
+            if (player.getCurrentState() instanceof com.fearjosh.frontend.state.player.InjuredState) {
                 player.setState(com.fearjosh.frontend.state.player.NormalState.getInstance());
                 System.out.println("[PlayScreen.show()] Player state reset to NormalState");
             }
         }
 
-        // SET STATE ke PLAYING saat screen ditampilkan
-        // (Kecuali jika dari Main Menu yang sudah set PLAYING)
-        if (!GameManager.getInstance().isPaused()) {
-            GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
+        // Handle game state transitions properly
+        GameManager gm = GameManager.getInstance();
+        
+        // If coming from STORY state (after intro cutscene), keep STORY
+        // If coming from PLAYING state (resume/testing), keep PLAYING
+        // Only override if currently not in a gameplay state
+        GameManager.GameState currentState = gm.getCurrentState();
+        if (currentState != GameManager.GameState.STORY && 
+            currentState != GameManager.GameState.PLAYING && 
+            !gm.isPaused()) {
+            // Coming from somewhere else (CUTSCENE ended), determine correct state
+            if (!gm.hasMetJosh()) {
+                gm.setCurrentState(GameManager.GameState.STORY);
+                tutorialOverlay.start();
+                System.out.println("[PlayScreen.show()] Set to STORY state - tutorial started");
+            } else {
+                gm.setCurrentState(GameManager.GameState.PLAYING);
+                System.out.println("[PlayScreen.show()] Set to PLAYING state - Josh already met");
+            }
         }
 
         System.out.println(
-                "[PlayScreen.show()] Screen shown - GameState: " + GameManager.getInstance().getCurrentState());
+                "[PlayScreen.show()] Screen shown - GameState: " + gm.getCurrentState());
     }
 
     @Override
@@ -1966,17 +2668,78 @@ public class PlayScreen implements Screen {
         if (inventorySlotSelectedTexture != null) {
             inventorySlotSelectedTexture.dispose();
         }
-        if (captureTransitionTexture != null) {
-            captureTransitionTexture.dispose();
+        if (injuryTransitionTexture != null) {
+            injuryTransitionTexture.dispose();
         }
+        if (injuredMinigame != null) {
+            injuredMinigame.dispose();
+        }
+        
+        // Dispose jumpscare manager resources
+        JumpscareManager.getInstance().dispose();
     }
 
     // ======================
     // ESCAPE MINIGAME
     // ======================
 
+    // --- INJURED MINIGAME (NEW SYSTEM) ---
+    
     /**
-     * Start the escape minigame (triggered by pressing F when captured)
+     * Start the injured minigame (triggered by pressing F when injured)
+     * Uses new InjuredMinigame class with bandaging mechanic
+     * The minigame renders IN-PLACE at the player's current position
+     */
+    private void startInjuredMinigame() {
+        // Set player to injured state - this changes the player's sprite to jonatan_injured
+        player.setState(com.fearjosh.frontend.state.player.InjuredState.getInstance());
+        player.setInjured(true);
+        
+        // Start minigame at player's current position (in-world rendering)
+        injuredMinigame.startAtPosition(
+            // On success callback
+            () -> {
+                System.out.println("[INJURED] Player berhasil membalut lukanya!");
+                onInjuredMinigameSuccess();
+            },
+            // On fail callback
+            () -> {
+                System.out.println("[INJURED] Player gagal membalut! Press F to try again.");
+                onInjuredMinigameFail();
+            },
+            player.getX(),  // Player's current X position
+            player.getY()   // Player's current Y position
+        );
+        System.out.println("[MINIGAME] Injured minigame started at (" + player.getX() + ", " + player.getY() + ")! Press SPACE rapidly to bandage yourself!");
+    }
+    
+    /**
+     * Called when player successfully completes bandaging minigame
+     */
+    private void onInjuredMinigameSuccess() {
+        playerFullyInjured = false;
+        injuryPhaseTimer = 0f;
+
+        // Reset player state to normal
+        player.setState(com.fearjosh.frontend.state.player.NormalState.getInstance());
+        player.setInjured(false);  // Clear injured flag so normal sprite shows
+
+        System.out.println("[INJURED] Player recovered and can move again!");
+    }
+    
+    /**
+     * Called when player fails the bandaging minigame
+     */
+    private void onInjuredMinigameFail() {
+        // Player still injured, must try again
+        // (life already lost when caught, no need to lose again)
+        System.out.println("[INJURED] Bandaging failed! Press F to try again.");
+    }
+
+    // --- LEGACY ESCAPE MINIGAME (kept for compatibility) ---
+
+    /**
+     * Start the escape minigame (triggered by pressing F when injured)
      */
     private void startEscapeMinigame() {
         escapeMinigameActive = true;
@@ -2018,14 +2781,14 @@ public class PlayScreen implements Screen {
      */
     private void escapeSuccessful() {
         escapeMinigameActive = false;
-        playerFullyCaptured = false;
-        capturePhaseTimer = 0f;
+        playerFullyInjured = false;
+        injuryPhaseTimer = 0f;
 
         // Reset player state to normal
         player.setState(com.fearjosh.frontend.state.player.NormalState.getInstance());
-        player.setCaptured(false);
+        player.setInjured(false);
 
-        System.out.println("[ESCAPE] Player berhasil lepas dari tali!");
+        System.out.println("[ESCAPE] Player successfully escaped!");
     }
 
     /**
@@ -2033,8 +2796,8 @@ public class PlayScreen implements Screen {
      */
     private void escapeFailed() {
         escapeMinigameActive = false;
-        // Player tetap terikat, harus coba lagi
-        System.out.println("[ESCAPE] Player gagal lepas! Press F to try again.");
+        // Player still injured, must try again
+        System.out.println("[ESCAPE] Player failed to escape! Press F to try again.");
     }
 
     /**
@@ -2072,25 +2835,80 @@ public class PlayScreen implements Screen {
 
         // Draw text instructions and timer
         batch.begin();
-        String instruction = "PRESS SPACE TO ESCAPE!";
+        String instruction = "TEKAN SPASI UNTUK KABUR!";
         com.badlogic.gdx.graphics.g2d.GlyphLayout instructionLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(
                 font, instruction);
         font.draw(batch, instruction, (VIRTUAL_WIDTH - instructionLayout.width) / 2f, barY + barHeight + 40f);
 
         // Timer
         float timeRemaining = ESCAPE_TIME_LIMIT - escapeTimer;
-        String timerText = String.format("Time: %.1fs", timeRemaining);
+        String timerText = String.format("Waktu: %.1fd", timeRemaining);
         com.badlogic.gdx.graphics.g2d.GlyphLayout timerLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
                 timerText);
         font.draw(batch, timerText, (VIRTUAL_WIDTH - timerLayout.width) / 2f, barY - 20f);
 
         // Progress percentage
-        String progressText = String.format("Progress: %d%%", (int) (escapeProgress * 100));
+        String progressText = String.format("Kemajuan: %d%%", (int) (escapeProgress * 100));
         com.badlogic.gdx.graphics.g2d.GlyphLayout progressLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
                 progressText);
         font.draw(batch, progressText, (VIRTUAL_WIDTH - progressLayout.width) / 2f, barY + barHeight / 2f + 5f);
 
         batch.end();
+    }
+
+    // ======================
+    // ENDING SYSTEM
+    // ======================
+
+    /**
+     * Trigger good ending - player successfully escapes through gym back door
+     */
+    private void triggerGoodEnding() {
+        System.out.println("[ENDING] Good ending triggered - Player escapes!");
+        
+        GameManager gm = GameManager.getInstance();
+        gm.setCurrentState(GameManager.GameState.ENDING);
+        
+        // Stop gameplay
+        playerFullyInjured = false;
+        escapeMinigameActive = false;
+        paused = false;
+        
+        // Despawn enemy
+        if (josh != null) {
+            RoomDirector rd = gm.getRoomDirector();
+            if (rd != null) {
+                rd.onEnemyDespawn();
+            }
+            josh = null;
+        }
+        
+        // Play escape success in-game cutscene first
+        inGameCutscene.startCutscene(InGameCutscene.CutsceneType.ESCAPE_SUCCESS, () -> {
+            // After in-game cutscene, play ending storyboard cutscene
+            System.out.println("[ENDING] Transitioning to ending cutscene...");
+            
+            // End the current session
+            if (gm.getCurrentSession() != null) {
+                gm.getCurrentSession().setActive(false);
+            }
+            
+            // Transition to ending cutscene screen
+            com.fearjosh.frontend.cutscene.CutsceneManager cutsceneMgr = 
+                com.fearjosh.frontend.cutscene.CutsceneManager.getInstance();
+            
+            // Create main menu screen as the destination after cutscene
+            MainMenuScreen mainMenu = new MainMenuScreen(game);
+            
+            // Play the ending cutscene
+            boolean played = cutsceneMgr.playCutscene(game, "ending_good", mainMenu);
+            
+            if (!played) {
+                // Fallback if cutscene not found - go straight to main menu
+                System.out.println("[ENDING] Warning: ending_good cutscene not found, going to main menu");
+                game.setScreen(mainMenu);
+            }
+        });
     }
 
     // ======================
@@ -2111,7 +2929,7 @@ public class PlayScreen implements Screen {
         gm.setCurrentState(GameManager.GameState.GAME_OVER);
 
         // Stop all gameplay
-        playerFullyCaptured = false; // Exit capture state
+        playerFullyInjured = false; // Exit injured state
         escapeMinigameActive = false;
         paused = false; // Exit pause state
 
@@ -2160,8 +2978,8 @@ public class PlayScreen implements Screen {
         // Draw game over text
         batch.begin();
 
-        // Main "GAME OVER" text
-        String gameOverText = "GAME OVER";
+        // Main "TAMAT" text
+        String gameOverText = "TAMAT";
         com.badlogic.gdx.graphics.g2d.GlyphLayout gameOverLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
                 gameOverText);
         float gameOverX = (VIRTUAL_WIDTH - gameOverLayout.width) / 2f;
@@ -2169,7 +2987,7 @@ public class PlayScreen implements Screen {
         font.draw(batch, gameOverText, gameOverX, gameOverY);
 
         // Subtitle text
-        String subtitleText = "Josh got you...";
+        String subtitleText = "Josh menangkapmu...";
         com.badlogic.gdx.graphics.g2d.GlyphLayout subtitleLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
                 subtitleText);
         float subtitleX = (VIRTUAL_WIDTH - subtitleLayout.width) / 2f;
@@ -2178,7 +2996,7 @@ public class PlayScreen implements Screen {
 
         // Timer countdown text
         float timeRemaining = GAME_OVER_DURATION - gameOverTimer;
-        String timerText = String.format("Returning to menu in %.0fs...", timeRemaining);
+        String timerText = String.format("Kembali ke menu dalam %.0f detik...", timeRemaining);
         com.badlogic.gdx.graphics.g2d.GlyphLayout timerLayout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font,
                 timerText);
         float timerX = (VIRTUAL_WIDTH - timerLayout.width) / 2f;
@@ -2186,6 +3004,29 @@ public class PlayScreen implements Screen {
         font.draw(batch, timerText, timerX, timerY);
 
         batch.end();
+    }
+
+    // ==================== RoomDirectorEventListener Implementation ====================
+    
+    /**
+     * Called by RoomDirector when camera shake should be triggered
+     * (e.g., enemy enters room through door)
+     */
+    @Override
+    public void onCameraShake(float duration, float intensity) {
+        if (cameraController != null) {
+            cameraController.shake(duration, intensity);
+            System.out.println("[PlayScreen] Camera shake triggered: " + duration + "s, intensity " + intensity);
+        }
+    }
+    
+    /**
+     * Called by RoomDirector when enemy enters through a specific door
+     */
+    @Override
+    public void onDoorEntry(RoomDirector.DoorDirection direction) {
+        System.out.println("[PlayScreen] Enemy door entry from: " + direction);
+        // Additional visual effects could be added here (flash, etc.)
     }
 
 }

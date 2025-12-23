@@ -2,9 +2,12 @@ package com.fearjosh.frontend.state.enemy;
 
 import com.fearjosh.frontend.entity.Enemy;
 import com.fearjosh.frontend.entity.Player;
-import com.fearjosh.frontend.world.Room;
 import com.fearjosh.frontend.config.Constants;
 
+/**
+ * Chasing state - enemy actively pursues player using A* pathfinding.
+ * Room parameter removed; collision/pathing uses TMX via Enemy's TiledMapManager.
+ */
 public class EnemyChasingState implements EnemyState {
 
     private static final float COLLISION_DISTANCE = 30f;
@@ -18,7 +21,7 @@ public class EnemyChasingState implements EnemyState {
     }
 
     @Override
-    public void update(Enemy enemy, Player player, Room currentRoom, float delta) {
+    public void update(Enemy enemy, Player player, float delta) {
 
         float dx = player.getCenterX() - enemy.getCenterX();
         float dy = player.getCenterY() - enemy.getCenterY();
@@ -43,19 +46,18 @@ public class EnemyChasingState implements EnemyState {
             }
         }
         
-        // Calculate new path if needed
+        // Calculate new path if needed (TMX-based via Enemy's pathfinding)
         if (needsNewPath) {
             enemy.calculatePathTo(
                 player.getCenterX(), 
                 player.getCenterY(),
-                currentRoom,
                 Constants.VIRTUAL_WIDTH,
                 Constants.VIRTUAL_HEIGHT
             );
         }
         
         // Follow path (will recalculate periodically)
-        boolean moving = enemy.followPath(delta, currentRoom, 
+        boolean moving = enemy.followPath(delta, 
             Constants.VIRTUAL_WIDTH, Constants.VIRTUAL_HEIGHT);
         
         // If no path, fall back to direct movement (SMOOTH DIAGONAL)
@@ -70,7 +72,7 @@ public class EnemyChasingState implements EnemyState {
             float moveY = dy * speed * delta;
             
             // Apply BOTH X and Y together for true diagonal movement
-            enemy.move(moveX, moveY, currentRoom);
+            enemy.move(moveX, moveY);
         }
         
         // ======================================================

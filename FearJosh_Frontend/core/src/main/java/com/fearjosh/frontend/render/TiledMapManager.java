@@ -20,7 +20,6 @@ import com.fearjosh.frontend.world.RoomId;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +69,12 @@ public class TiledMapManager implements Disposable {
     private int mapWidthTiles;
     private int mapHeightTiles;
 
+    // Physical pickup texture for locker_key ONLY
+    // locker_key is the ONLY key that renders physically in the world
+    // janitor_key and gym_key are INVISIBLE trigger zones
+    private com.badlogic.gdx.graphics.Texture lockerKeyTexture;
+    private static final float KEY_RENDER_SIZE = 16f; // Size to render physical key (keys are small!)
+
     public TiledMapManager() {
         this.mapLoader = new TmxMapLoader();
         this.loadedMaps = new HashMap<>();
@@ -77,6 +82,28 @@ public class TiledMapManager implements Disposable {
 
         // Register which rooms have TMX maps
         registerRoomMaps();
+        
+        // Load texture for physical locker_key pickup ONLY
+        loadLockerKeyTexture();
+    }
+    
+    /**
+     * Load the texture for physical locker_key pickup.
+     * ONLY locker_key is rendered physically - other keys are invisible triggers.
+     */
+    private void loadLockerKeyTexture() {
+        try {
+            if (Gdx.files.internal("Items/locker_key.png").exists()) {
+                lockerKeyTexture = new com.badlogic.gdx.graphics.Texture(
+                    Gdx.files.internal("Items/locker_key.png")
+                );
+                Gdx.app.log("TiledMapManager", "Loaded physical locker_key texture");
+            } else {
+                Gdx.app.error("TiledMapManager", "Items/locker_key.png not found!");
+            }
+        } catch (Exception e) {
+            Gdx.app.error("TiledMapManager", "Failed to load locker_key texture", e);
+        }
     }
 
     /**
@@ -90,6 +117,7 @@ public class TiledMapManager implements Disposable {
         roomMapFiles.put(RoomId.CLASS_1A, "CLASSROOM_1A.tmx");
         roomMapFiles.put(RoomId.CLASS_2A, "CLASSROOM_2A.tmx");
         roomMapFiles.put(RoomId.LOBBY, "lobby.tmx");
+        roomMapFiles.put(RoomId.JANITOR, "janitor.tmx");
 
         // Add more room mappings as needed:
         // etc.
@@ -150,6 +178,199 @@ public class TiledMapManager implements Disposable {
 
         // Load tile-based interactables (lockers, chests, etc.)
         loadTileInteractables();
+        
+        // Load exit_key trigger zones (NOT physical pickups)
+        loadExitKeyTriggers();
+    }
+    
+    /**
+     * Load exit_key TRIGGER ZONES from the exit_key object layer.
+     * These are invisible trigger areas - NOT physical key pickups.
+     * Players trigger them by walking into the zone.
+     * Supports both Rectangle objects and Point objects (with default size).
+     */
+    private void loadExitKeyTriggers() {
+        currentExitKeyTriggers.clear();
+        
+        if (currentMap == null) return;
+        
+        MapLayer keyLayer = currentMap.getLayers().get(EXIT_KEY_LAYER);
+        if (keyLayer == null) {
+            Gdx.app.log("TiledMapManager", "No exit_key layer found in current map");
+            return;
+        }
+        
+        // Default trigger size for point objects (48x48 pixels, centered on point)
+        final float DEFAULT_TRIGGER_SIZE = 48f;
+        
+        MapObjects objects = keyLayer.getObjects();
+        for (MapObject obj : objects) {
+            String itemType = obj.getProperties().get("item", String.class);
+            
+            if (itemType == null || itemType.isEmpty()) {
+                Gdx.app.log("TiledMapManager", "Skipping exit_key object without 'item' property");
+                continue; // Skip objects without item property
+            }
+            
+            Rectangle scaledBounds = null;
+            
+            if (obj instanceof RectangleMapObject) {
+                // Rectangle object with explicit size
+                Rectangle rect = ((RectangleMapObject) obj).getRectangle();
+                
+                // Check if it's actually a rectangle (has width/height > 0)
+                if (rect.width > 0 && rect.height > 0) {
+                    scaledBounds = new Rectangle(
+                        rect.x * unitScale,
+                        rect.y * unitScale,
+                        rect.width * unitScale,
+                        rect.height * unitScale
+                    );
+                    Gdx.app.log("TiledMapManager", "exit_key Rectangle: " + itemType + 
+                        " at (" + rect.x + ", " + rect.y + ") size=(" + rect.width + "x" + rect.height + ")");
+                } else {
+                    // It's a point disguised as RectangleMapObject (width/height = 0)
+                    scaledBounds = new Rectangle(
+                        (rect.x - DEFAULT_TRIGGER_SIZE / 2f) * unitScale,
+                        (rect.y - DEFAULT_TRIGGER_SIZE / 2f) * unitScale,
+                        DEFAULT_TRIGGER_SIZE * unitScale,
+                        DEFAULT_TRIGGER_SIZE * unitScale
+                    );
+                    Gdx.app.log("TiledMapManager", "exit_key Point (from Rect): " + itemType + 
+                        " at (" + rect.x + ", " + rect.y + ") with default size " + DEFAULT_TRIGGER_SIZE);
+                }
+            } else {
+                // Other object types (EllipseMapObject, PolygonMapObject, etc.)
+                // Try to read x and y from properties
+                Float x = obj.getProperties().get("x", Float.class);
+                Float y = obj.getProperties().get("y", Float.class);
+                
+                if (x != null && y != null) {
+                    // Center the trigger box on the point position
+                    scaledBounds = new Rectangle(
+                        (x - DEFAULT_TRIGGER_SIZE / 2f) * unitScale,
+                        (y - DEFAULT_TRIGGER_SIZE / 2f) * unitScale,
+                        DEFAULT_TRIGGER_SIZE * unitScale,
+                        DEFAULT_TRIGGER_SIZE * unitScale
+                    );
+                    Gdx.app.log("TiledMapManager", "exit_key Other: " + itemType + 
+                        " at (" + x + ", " + y + ") with default size " + DEFAULT_TRIGGER_SIZE);
+                } else {
+                    Gdx.app.error("TiledMapManager", "exit_key object '" + itemType + 
+                        "' has no valid position! Type: " + obj.getClass().getSimpleName());
+                }
+            }
+            
+            if (scaledBounds != null) {
+                // Get TMX object ID for tracking consumed triggers
+                int objectId = obj.getProperties().get("id", 0, Integer.class);
+                if (objectId == 0) {
+                    // Fallback: use object's name hash or generate from position
+                    objectId = (int)(scaledBounds.x * 1000 + scaledBounds.y);
+                }
+                
+                ExitKeyTrigger trigger = new ExitKeyTrigger(scaledBounds, itemType, objectId);
+                currentExitKeyTriggers.add(trigger);
+                Gdx.app.log("TiledMapManager", "Loaded exit_key TRIGGER: " + itemType + 
+                    " objectId=" + objectId + " at (" + scaledBounds.x + ", " + scaledBounds.y + 
+                    ") size=(" + scaledBounds.width + "x" + scaledBounds.height + ")");
+            }
+        }
+        
+        Gdx.app.log("TiledMapManager", "Loaded " + currentExitKeyTriggers.size + " exit_key TRIGGER ZONES");
+    }
+    
+    /**
+     * Check if player overlaps any unconsumed exit_key trigger zone.
+     * 
+     * @param playerBounds Player's collision bounds
+     * @return ExitKeyTrigger if overlapping, null otherwise
+     */
+    public ExitKeyTrigger checkExitKeyTrigger(Rectangle playerBounds) {
+        for (ExitKeyTrigger trigger : currentExitKeyTriggers) {
+            if (!trigger.consumed && trigger.overlaps(playerBounds)) {
+                return trigger;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Check if player overlaps any unconsumed exit_key trigger zone (by center point).
+     * 
+     * @param playerX Player center X
+     * @param playerY Player center Y
+     * @return ExitKeyTrigger if overlapping, null otherwise
+     */
+    public ExitKeyTrigger checkExitKeyTrigger(float playerX, float playerY) {
+        for (ExitKeyTrigger trigger : currentExitKeyTriggers) {
+            if (!trigger.consumed && trigger.overlaps(playerX, playerY)) {
+                return trigger;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Mark an exit_key trigger as consumed (used).
+     * Returns a unique key for persistent tracking: "roomId_objectId"
+     */
+    public String consumeExitKeyTrigger(ExitKeyTrigger trigger) {
+        if (trigger != null) {
+            trigger.consumed = true;
+            Gdx.app.log("TiledMapManager", "Consumed exit_key trigger: " + trigger.itemType + 
+                " objectId=" + trigger.objectId);
+        }
+        return trigger != null ? String.valueOf(trigger.objectId) : null;
+    }
+    
+    /**
+     * Mark a trigger as consumed by its object ID (for restoring state on room load).
+     */
+    public void markTriggerConsumed(int objectId) {
+        for (ExitKeyTrigger trigger : currentExitKeyTriggers) {
+            if (trigger.objectId == objectId) {
+                trigger.consumed = true;
+                Gdx.app.log("TiledMapManager", "Restored consumed state for trigger objectId=" + objectId);
+                break;
+            }
+        }
+    }
+    
+    /**
+     * Get all current exit_key triggers (for debugging/state queries).
+     */
+    public Array<ExitKeyTrigger> getExitKeyTriggers() {
+        return currentExitKeyTriggers;
+    }
+    
+    /**
+     * Render ONLY the physical locker_key pickup (if unconsumed).
+     * janitor_key and gym_key are INVISIBLE trigger zones and are NOT rendered.
+     * 
+     * @param batch SpriteBatch to render with (must be begun)
+     */
+    public void renderPhysicalLockerKey(SpriteBatch batch) {
+        if (lockerKeyTexture == null) {
+            // Texture not loaded, try to load it
+            loadLockerKeyTexture();
+            if (lockerKeyTexture == null) {
+                return;
+            }
+        }
+        
+        for (ExitKeyTrigger trigger : currentExitKeyTriggers) {
+            // ONLY render locker_key physically - other keys are invisible triggers
+            if (!trigger.consumed && "locker_key".equalsIgnoreCase(trigger.itemType)) {
+                float renderX = trigger.bounds.x + (trigger.bounds.width - KEY_RENDER_SIZE) / 2f;
+                float renderY = trigger.bounds.y + (trigger.bounds.height - KEY_RENDER_SIZE) / 2f;
+                
+                batch.draw(lockerKeyTexture, renderX, renderY, KEY_RENDER_SIZE, KEY_RENDER_SIZE);
+                
+                // Debug log (remove after testing)
+                // Gdx.app.log("TiledMapManager", "Rendering locker_key at (" + renderX + ", " + renderY + ")");
+            }
+        }
     }
 
     /**
@@ -481,15 +702,74 @@ public class TiledMapManager implements Disposable {
         public final float x;
         public final float y;
         public final String fromRoom;
+        
+        // Optional properties for josh_spawn context-aware spawning
+        public String facing;       // Direction Josh should face (optional)
+        public int priority;        // Priority for spawn selection (higher = preferred)
+        public String nearDoor;     // Which door this spawn is near (for chase context)
 
         public SpawnInfo(float x, float y, String fromRoom) {
             this.x = x;
             this.y = y;
             this.fromRoom = fromRoom;
+            this.facing = null;
+            this.priority = 0;
+            this.nearDoor = null;
+        }
+    }
+    
+    /**
+     * Data class for exit_key TRIGGER ZONE from TMX exit_key layer.
+     * These are invisible trigger zones - NOT physical pickups.
+     * Players trigger them by overlapping the zone bounds.
+     */
+    public static class ExitKeyTrigger {
+        public final Rectangle bounds;      // TMX bounds (for overlap detection)
+        public final String itemType;       // "locker_key", "janitor_key", "gym_key"
+        public final int objectId;          // TMX object id for tracking consumed triggers
+        public boolean consumed;            // Whether this trigger has been used
+        
+        public ExitKeyTrigger(Rectangle bounds, String itemType, int objectId) {
+            this.bounds = bounds;
+            this.itemType = itemType;
+            this.objectId = objectId;
+            this.consumed = false;
+        }
+        
+        /**
+         * Check if a point overlaps this trigger zone
+         */
+        public boolean overlaps(float x, float y) {
+            return bounds.contains(x, y);
+        }
+        
+        /**
+         * Check if a rectangle overlaps this trigger zone
+         */
+        public boolean overlaps(Rectangle playerBounds) {
+            return bounds.overlaps(playerBounds);
+        }
+        
+        /**
+         * Get center X for distance checks
+         */
+        public float getCenterX() {
+            return bounds.x + bounds.width / 2f;
+        }
+        
+        /**
+         * Get center Y for distance checks
+         */
+        public float getCenterY() {
+            return bounds.y + bounds.height / 2f;
         }
     }
 
     private static final String SPAWN_LAYER = "spawn";
+    private static final String EXIT_KEY_LAYER = "exit_key";
+    
+    // Cache for exit_key trigger zones in current map (NOT physical pickups)
+    private Array<ExitKeyTrigger> currentExitKeyTriggers = new Array<>();
 
     /**
      * Get spawn point for player coming from a specific room.
@@ -661,6 +941,69 @@ public class TiledMapManager implements Disposable {
 
         Gdx.app.log("TiledMapManager", "No josh_spawn point found in current map");
         return null;
+    }
+    
+    /**
+     * Get ALL Josh spawn points from the current map.
+     * Used by JoshSpawnController for context-aware spawn selection.
+     * 
+     * @return Array of SpawnInfo, or empty array if none found
+     */
+    public Array<SpawnInfo> getAllJoshSpawnPoints() {
+        Array<SpawnInfo> spawnPoints = new Array<>();
+        
+        if (currentMap == null)
+            return spawnPoints;
+
+        MapLayer spawnLayer = currentMap.getLayers().get(SPAWN_LAYER);
+        if (spawnLayer == null) {
+            spawnLayer = currentMap.getLayers().get("Spawn");
+            if (spawnLayer == null) {
+                spawnLayer = currentMap.getLayers().get("spawns");
+            }
+        }
+
+        if (spawnLayer == null) {
+            return spawnPoints;
+        }
+
+        MapObjects objects = spawnLayer.getObjects();
+        for (MapObject obj : objects) {
+            // Check for josh_spawn boolean property
+            Boolean isJoshSpawn = obj.getProperties().get("josh_spawn", Boolean.class);
+            
+            if (isJoshSpawn != null && isJoshSpawn) {
+                // Get position - handle both point objects and rectangle objects
+                float x, y;
+                if (obj instanceof RectangleMapObject) {
+                    Rectangle rect = ((RectangleMapObject) obj).getRectangle();
+                    x = rect.x * unitScale;
+                    y = rect.y * unitScale;
+                } else {
+                    // For point objects, use the object's position
+                    Float objX = obj.getProperties().get("x", Float.class);
+                    Float objY = obj.getProperties().get("y", Float.class);
+                    if (objX == null || objY == null) continue;
+                    x = objX * unitScale;
+                    y = objY * unitScale;
+                }
+                
+                // Get optional properties
+                String facing = obj.getProperties().get("facing", String.class);
+                Integer priority = obj.getProperties().get("priority", Integer.class);
+                String nearDoor = obj.getProperties().get("near_door", String.class);
+                
+                SpawnInfo info = new SpawnInfo(x, y, "josh_spawn");
+                info.facing = facing;
+                info.priority = priority != null ? priority : 0;
+                info.nearDoor = nearDoor;
+                
+                spawnPoints.add(info);
+            }
+        }
+        
+        Gdx.app.log("TiledMapManager", "Found " + spawnPoints.size + " josh_spawn points in current map");
+        return spawnPoints;
     }
 
     /**
@@ -883,6 +1226,7 @@ public class TiledMapManager implements Disposable {
     // TILE INTERACTABLES
     // ======================
 
+    @SuppressWarnings("unused") // Reserved for future tile-based interactable system
     private static final String INTERACTABLES_LAYER = "interactables";
 
     /**
@@ -899,10 +1243,12 @@ public class TiledMapManager implements Disposable {
         public final int closedTileId; // GID of closed/inactive tile
         public final int openedTileId; // GID of opened/active tile
         public final String name; // Optional name
+        public final String containedItem; // Item inside (e.g., "battery", "chocolate", null if empty)
         public boolean isOpen; // Current state
+        public boolean itemCollected; // Has the item been picked up?
 
         public TileInteractable(Rectangle bounds, String type, String targetLayer,
-                int tileX, int tileY, int closedTileId, int openedTileId, String name) {
+                int tileX, int tileY, int closedTileId, int openedTileId, String name, String containedItem) {
             this.bounds = bounds;
             this.type = type;
             this.targetLayer = targetLayer;
@@ -911,7 +1257,19 @@ public class TiledMapManager implements Disposable {
             this.closedTileId = closedTileId;
             this.openedTileId = openedTileId;
             this.name = name;
+            this.containedItem = containedItem;
             this.isOpen = false;
+            this.itemCollected = false;
+        }
+        
+        // Legacy constructor (no item)
+        public TileInteractable(Rectangle bounds, String type, String targetLayer,
+                int tileX, int tileY, int closedTileId, int openedTileId, String name) {
+            this(bounds, type, targetLayer, tileX, tileY, closedTileId, openedTileId, name, null);
+        }
+        
+        public boolean hasItem() {
+            return containedItem != null && !containedItem.isEmpty() && !itemCollected;
         }
 
         public float getCenterX() {
@@ -971,6 +1329,8 @@ public class TiledMapManager implements Disposable {
                     String type = tile.getProperties().get("type", "unknown", String.class);
                     Integer openedTileGid = tile.getProperties().get("opened_tile", Integer.class);
                     String name = tile.getProperties().get("name", "Interactable", String.class);
+                    // Get item contained in locker (can be null)
+                    String containedItem = tile.getProperties().get("item", String.class);
 
                     if (openedTileGid == null) {
                         Gdx.app.log("TiledMapManager", "Warning: Interactable tile at (" + x + ", " + y +
@@ -988,12 +1348,13 @@ public class TiledMapManager implements Disposable {
 
                     TileInteractable interactable = new TileInteractable(
                             bounds, type, layerName, x, y,
-                            closedTileGid, openedTileGid, name);
+                            closedTileGid, openedTileGid, name, containedItem);
                     tileInteractables.add(interactable);
 
+                    String itemInfo = containedItem != null ? " contains=" + containedItem : "";
                     Gdx.app.log("TiledMapManager", "Found interactable tile: " + type +
                             " '" + name + "' at (" + x + ", " + y + ") layer=" + layerName +
-                            " closed=" + closedTileGid + " opened=" + openedTileGid);
+                            " closed=" + closedTileGid + " opened=" + openedTileGid + itemInfo);
                 }
             }
         }
@@ -1110,6 +1471,48 @@ public class TiledMapManager implements Disposable {
     // ======================
     // COLLISION DETECTION
     // ======================
+    
+    /**
+     * Check if a world position contains a tile that should BLOCK flashlight.
+     * Uses the "flashlight_passthrough" property from tileset (A4.tsx).
+     * If flashlight_passthrough = false, the tile blocks light.
+     * If flashlight_passthrough is not defined (or true), light passes through.
+     * 
+     * @param worldX World X coordinate
+     * @param worldY World Y coordinate
+     * @return true if position contains a tile that should block light
+     */
+    public boolean isWallTile(float worldX, float worldY) {
+        if (currentMap == null)
+            return false;
+
+        // Convert world coordinates to tile coordinates
+        int tileX = (int) (worldX / (tileWidth * unitScale));
+        int tileY = (int) (worldY / (tileHeight * unitScale));
+
+        // Out of bounds = no wall
+        if (tileX < 0 || tileX >= mapWidthTiles || tileY < 0 || tileY >= mapHeightTiles) {
+            return false;
+        }
+
+        // Check ALL tile layers for tiles with flashlight_passthrough = false
+        for (MapLayer layer : currentMap.getLayers()) {
+            if (layer instanceof TiledMapTileLayer) {
+                TiledMapTileLayer tileLayer = (TiledMapTileLayer) layer;
+                TiledMapTileLayer.Cell cell = tileLayer.getCell(tileX, tileY);
+                if (cell != null && cell.getTile() != null) {
+                    // Check for "flashlight_passthrough" property from tileset
+                    // If flashlight_passthrough = false, this tile blocks light
+                    Boolean flashlightPassthrough = cell.getTile().getProperties().get("flashlight_passthrough", Boolean.class);
+                    if (flashlightPassthrough != null && !flashlightPassthrough) {
+                        return true; // Blocks light
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
 
     /**
      * Check if a world position is walkable (not colliding with walls)
@@ -1470,5 +1873,11 @@ public class TiledMapManager implements Disposable {
             map.dispose();
         }
         loadedMaps.clear();
+        
+        // Dispose physical locker_key texture
+        if (lockerKeyTexture != null) {
+            lockerKeyTexture.dispose();
+            lockerKeyTexture = null;
+        }
     }
 }

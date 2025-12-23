@@ -2,8 +2,11 @@ package com.fearjosh.frontend.state.enemy;
 
 import com.fearjosh.frontend.entity.Enemy;
 import com.fearjosh.frontend.entity.Player;
-import com.fearjosh.frontend.world.Room;
 
+/**
+ * State interface for Enemy behavior (State Pattern).
+ * Room parameter removed - collision/pathing now uses TMX via TiledMapManager.
+ */
 public interface EnemyState {
 
     // dipanggil sekali saat state ini dipasang
@@ -12,6 +15,6 @@ public interface EnemyState {
     // dipanggil sekali saat state ini dilepas
     default void onExit(Enemy enemy) {}
 
-    // dipanggil tiap frame
-    void update(Enemy enemy, Player player, Room currentRoom, float delta);
+    // dipanggil tiap frame (TMX-based collision via Enemy's TiledMapManager)
+    void update(Enemy enemy, Player player, float delta);
 }

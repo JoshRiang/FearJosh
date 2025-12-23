@@ -9,7 +9,7 @@ public class BatteryItem extends Item {
     private static final float RECHARGE_AMOUNT = 0.25f; // 25% battery per item (1 bar = quarter charge)
 
     public BatteryItem() {
-        super("Battery", "Restores flashlight power", true);
+        super("Baterai", "Mengisi ulang daya senter", true);
         loadIcon("Items/battery.png"); // Assuming battery icon exists
     }
 

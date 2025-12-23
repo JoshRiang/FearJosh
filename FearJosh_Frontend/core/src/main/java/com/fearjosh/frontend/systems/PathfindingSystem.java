@@ -1,11 +1,12 @@
 package com.fearjosh.frontend.systems;
 
-import com.fearjosh.frontend.world.Room;
+import com.fearjosh.frontend.render.TiledMapManager;
 import java.util.*;
 
 /**
  * A* Pathfinding System for enemy navigation in Physical Mode
- * Uses grid-based pathfinding with furniture obstacles
+ * Uses grid-based pathfinding with TMX collision detection
+ * Room parameter removed; uses TiledMapManager for obstacle checking
  */
 public class PathfindingSystem {
     
@@ -18,14 +19,14 @@ public class PathfindingSystem {
      * @param startY Starting Y coordinate
      * @param goalX Goal X coordinate
      * @param goalY Goal Y coordinate
-     * @param room Current room with obstacles
+     * @param tiledMapManager TiledMapManager for TMX collision checking
      * @param worldWidth World width
      * @param worldHeight World height
      * @return List of waypoints (x,y pairs) or empty list if no path found
      */
     public static List<float[]> findPath(float startX, float startY, 
                                          float goalX, float goalY,
-                                         Room room,
+                                         TiledMapManager tiledMapManager,
                                          float worldWidth, float worldHeight) {
         
         // Convert to grid coordinates
@@ -95,8 +96,8 @@ public class PathfindingSystem {
                     continue;
                 }
                 
-                // Check if walkable (not blocked by furniture)
-                if (isBlocked(neighborX, neighborY, room)) {
+                // Check if walkable (not blocked by TMX collision)
+                if (isBlocked(neighborX, neighborY, tiledMapManager)) {
                     continue;
                 }
                 
@@ -105,8 +106,8 @@ public class PathfindingSystem {
                     int dx = (int)dir[0];
                     int dy = (int)dir[1];
                     // Check if adjacent orthogonal cells are blocked (prevent cutting corners)
-                    if (isBlocked(current.x + dx, current.y, room) || 
-                        isBlocked(current.x, current.y + dy, room)) {
+                    if (isBlocked(current.x + dx, current.y, tiledMapManager) || 
+                        isBlocked(current.x, current.y + dy, tiledMapManager)) {
                         continue; // Can't cut through corner
                     }
                 }
@@ -138,19 +139,26 @@ public class PathfindingSystem {
     }
     
     /**
-     * Check if grid cell is blocked by furniture
-     * NOTE: Now returns false since TMX collision is handled elsewhere
-     * Pathfinding should use TiledMapManager for proper obstaclecheck
+     * Check if grid cell is blocked using TMX collision
+     * Uses TiledMapManager.isWalkable() for proper collision detection
      */
-    private static boolean isBlocked(int gridX, int gridY, Room room) {
-        // TMX collision is now handled via TiledMapManager in Enemy class
-        // This method is a placeholder - proper pathfinding should integrate with TiledMapManager
-        return false;
+    private static boolean isBlocked(int gridX, int gridY, TiledMapManager tiledMapManager) {
+        if (tiledMapManager == null || !tiledMapManager.hasCurrentMap()) {
+            return false; // No collision data, assume walkable
+        }
+        
+        // Convert grid to world coordinates (center of cell)
+        float worldX = gridX * GRID_SIZE + GRID_SIZE / 2f;
+        float worldY = gridY * GRID_SIZE + GRID_SIZE / 2f;
+        
+        // Check if walkable via TMX
+        return !tiledMapManager.isWalkable(worldX, worldY);
     }
     
     /**
      * Check rectangle overlap
      */
+    @SuppressWarnings("unused") // Utility method for future collision detection
     private static boolean overlaps(float x1, float y1, float w1, float h1,
                                     float x2, float y2, float w2, float h2) {
         return x1 < x2 + w2 && x1 + w1 > x2 &&

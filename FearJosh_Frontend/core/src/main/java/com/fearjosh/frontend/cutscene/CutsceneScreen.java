@@ -345,6 +345,9 @@ public class CutsceneScreen implements Screen {
                     case PAN_DOWN:
                         drawY = state.currentY + DIALOG_BOX_HEIGHT - (layer.getPanAmount() * panProgress);
                         break;
+                    default:
+                        // ZOOM_IN, ZOOM_OUT, NONE - not used for pan animation
+                        break;
                 }
             }
 
@@ -421,13 +424,13 @@ public class CutsceneScreen implements Screen {
         // Draw progress indicator (e.g., "Press SPACE to continue" or "3/10")
         String progressText;
         if (!typingComplete) {
-            progressText = "Press SPACE to skip... (" +
+            progressText = "Tekan SPASI untuk skip... (" +
                     (currentDialogIndex + 1) + "/" + cutsceneData.getDialogCount() + ")";
         } else if (currentDialogIndex < cutsceneData.getDialogCount() - 1) {
-            progressText = "Press SPACE to continue... (" +
+            progressText = "Tekan SPASI untuk lanjut... (" +
                     (currentDialogIndex + 1) + "/" + cutsceneData.getDialogCount() + ")";
         } else {
-            progressText = "Press SPACE to finish... (" +
+            progressText = "Tekan SPASI untuk selesai... (" +
                     cutsceneData.getDialogCount() + "/" + cutsceneData.getDialogCount() + ")";
         }
 

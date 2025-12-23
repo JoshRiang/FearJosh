@@ -26,39 +26,39 @@ import java.util.Map;
  */
 public enum RoomId {
     // Entrance & Parking
-    PARKING("Parking Lot", 800, 700),
-    LOBBY("Main Lobby", 1440, 1440),
+    PARKING("Area Parkir", 800, 700),
+    LOBBY("Lobi Utama", 1440, 1440),
     
     // Main hallway - long horizontal corridor (1920x960 to match TMX map)
-    HALLWAY("Main Hallway", 1920, 960),
+    HALLWAY("Koridor Utama", 1920, 960),
     
     // Gym - large court at top (1440x1440 to match TMX map: 30x30 tiles * 48px)
-    GYM("Gymnasium", 1440, 1440),
+    GYM("Ruang Olahraga", 1440, 1440),
     
-    // Special rooms
-    JANITOR("Janitor Room", 400, 300),
-    RESTROOM("Restroom", 400, 350),
-    TEACHERS_ROOM("Teachers Room", 600, 400),
+    // Special rooms (dimensions match TMX maps: 30x30 tiles * 48px = 1440x1440)
+    JANITOR("Ruang Penjaga", 1440, 1440),
+    RESTROOM("Toilet", 400, 350),
+    TEACHERS_ROOM("Ruang Guru", 600, 400),
     
     // Top row classrooms (1A-8A) - above hallway (1440x1440 to match TMX: 30x30 tiles * 48px)
-    CLASS_1A("Classroom 1A", 1440, 1440),
-    CLASS_2A("Classroom 2A", 1440, 1440),
-    CLASS_3A("Classroom 3A", 500, 450),
-    CLASS_4A("Classroom 4A", 500, 450),
-    CLASS_5A("Classroom 5A", 500, 450),
-    CLASS_6A("Classroom 6A", 500, 450),
-    CLASS_7A("Classroom 7A", 500, 450),
-    CLASS_8A("Classroom 8A", 500, 450),
+    CLASS_1A("Kelas 1A", 1440, 1440),
+    CLASS_2A("Kelas 2A", 1440, 1440),
+    CLASS_3A("Kelas 3A", 500, 450),
+    CLASS_4A("Kelas 4A", 500, 450),
+    CLASS_5A("Kelas 5A", 500, 450),
+    CLASS_6A("Kelas 6A", 500, 450),
+    CLASS_7A("Kelas 7A", 500, 450),
+    CLASS_8A("Kelas 8A", 500, 450),
     
     // Bottom row classrooms (1B-8B) - below hallway
-    CLASS_1B("Classroom 1B", 500, 450),
-    CLASS_2B("Classroom 2B", 500, 450),
-    CLASS_3B("Classroom 3B", 500, 450),
-    CLASS_4B("Classroom 4B", 500, 450),
-    CLASS_5B("Classroom 5B", 500, 450),
-    CLASS_6B("Classroom 6B", 500, 450),
-    CLASS_7B("Classroom 7B", 500, 450),
-    CLASS_8B("Classroom 8B", 500, 450);
+    CLASS_1B("Kelas 1B", 500, 450),
+    CLASS_2B("Kelas 2B", 500, 450),
+    CLASS_3B("Kelas 3B", 500, 450),
+    CLASS_4B("Kelas 4B", 500, 450),
+    CLASS_5B("Kelas 5B", 500, 450),
+    CLASS_6B("Kelas 6B", 500, 450),
+    CLASS_7B("Kelas 7B", 500, 450),
+    CLASS_8B("Kelas 8B", 500, 450);
 
     private final String displayName;
     private final float width;

@@ -70,9 +70,11 @@ public final class Constants {
     
     // --- LEGACY (for backward compatibility) ---
     /** @deprecated Use PLAYER_RENDER_WIDTH instead */
+    @Deprecated
     public static final float PLAYER_WIDTH = PLAYER_RENDER_WIDTH;
     
     /** @deprecated Use PLAYER_RENDER_HEIGHT instead */
+    @Deprecated
     public static final float PLAYER_HEIGHT = PLAYER_RENDER_HEIGHT;
     
     /** Normal walking speed */
@@ -135,6 +137,20 @@ public final class Constants {
     
     /** Floor tile size for rendering */
     public static final int FLOOR_TILE_SIZE = 64;
+    
+    // ==================== KEY ITEMS (World Render) ====================
+    
+    /** Key sprite render size (small, consistent) */
+    public static final float KEY_RENDER_SIZE = 18f;
+    
+    /** Key pickup radius (how close player needs to be) */
+    public static final float KEY_PICKUP_RADIUS = 28f;
+    
+    /** Key bob animation amplitude (up/down motion) */
+    public static final float KEY_BOB_AMPLITUDE = 3f;
+    
+    /** Key bob animation speed */
+    public static final float KEY_BOB_SPEED = 2.5f;
     
     // ==================== DEBUG ====================
     
