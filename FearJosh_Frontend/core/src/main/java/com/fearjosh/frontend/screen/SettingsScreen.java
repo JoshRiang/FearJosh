@@ -1,9 +1,18 @@
 package com.fearjosh.frontend.screen;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Pixmap;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
+import com.badlogic.gdx.graphics.g2d.NinePatch;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
@@ -11,331 +20,189 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
-import com.badlogic.gdx.scenes.scene2d.actions.Actions;
-import com.badlogic.gdx.utils.Align;
-import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.utils.viewport.FitViewport;
-import com.badlogic.gdx.graphics.Pixmap;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
-import com.badlogic.gdx.scenes.scene2d.ui.ButtonGroup;
+import com.badlogic.gdx.utils.Align;
+import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.fearjosh.frontend.FearJosh;
-import com.fearjosh.frontend.difficulty.GameDifficulty;
 import com.fearjosh.frontend.core.GameManager;
+import com.fearjosh.frontend.difficulty.GameDifficulty;
 import com.fearjosh.frontend.systems.AudioManager;
+import com.fearjosh.frontend.ui.MenuButton;
 
 /**
- * Minimal placeholder Settings screen with a Back button.
+ * Settings screen with PNG-based difficulty buttons (Easy, Normal, Hard, Back).
+ * Uses MenuButton class for consistent styling with MainMenuScreen.
+ * 
+ * CUSTOMIZE BUTTON SIZES:
+ * - SETTINGS_BUTTON_WIDTH / SETTINGS_BUTTON_HEIGHT for difficulty buttons
+ * - Adjust startY and spacing in createButtons() for positioning
  */
 public class SettingsScreen implements Screen {
 
     private static final float VIRTUAL_WIDTH = 800f;
     private static final float VIRTUAL_HEIGHT = 600f;
+    
+    // ==================== BUTTON SIZE CUSTOMIZATION ====================
+    /** Width of settings buttons (Easy, Normal, Hard, Back) */
+    private static final float SETTINGS_BUTTON_WIDTH = 200f;
+    /** Height of settings buttons */
+    private static final float SETTINGS_BUTTON_HEIGHT = 56f;
+    /** Vertical spacing between buttons */
+    private static final float SETTINGS_BUTTON_SPACING = 16f;
+    // ===================================================================
 
-    private final Stage stage;
-    private final FitViewport viewport;
-    private final OrthographicCamera uiCamera;
-    private final Skin skin;
-
-    // Generated UI textures to dispose
-    private Texture cardTex;
-    private Texture pillUpTex;
-    private Texture pillOverTex;
-    private Texture pillDownTex;
-    private Texture pillCheckedTex;
+    private final FearJosh game;
+    private SpriteBatch batch;
+    private OrthographicCamera uiCamera;
+    private FitViewport viewport;
+    
+    private BitmapFont font;
+    private GlyphLayout glyphLayout;
+    private Texture backgroundTex;
+    
+    // PNG-based buttons
+    private MenuButton easyBtn;
+    private MenuButton normalBtn;
+    private MenuButton hardBtn;
+    private MenuButton backBtn;
+    
+    // Selection highlight texture
+    private Texture selectionHighlightTex;
+    
+    private boolean isActive = true;
+    
+    // For confirmation dialog (Scene2D Stage)
+    private Stage dialogStage;
+    private Skin dialogSkin;
+    private boolean showingDialog = false;
+    private GameDifficulty pendingDifficulty = null;
+    private Texture dialogCardTex;
+    private Texture dialogBtnUpTex;
+    private Texture dialogBtnOverTex;
+    private Texture dialogBtnDownTex;
 
     public SettingsScreen(FearJosh game) {
-        final FearJosh app = game;
+        this.game = game;
+        
         uiCamera = new OrthographicCamera();
         viewport = new FitViewport(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, uiCamera);
-        stage = new Stage(viewport);
-        Gdx.input.setInputProcessor(stage);
-
-        // Reuse Skin from MainMenu if available; otherwise create a basic one
-        // For simplicity, create a temporary Skin using Scene2D default font
-        skin = new Skin();
-        skin.add("default-font", new com.badlogic.gdx.graphics.g2d.BitmapFont());
-        com.badlogic.gdx.scenes.scene2d.ui.Label.LabelStyle ls = new com.badlogic.gdx.scenes.scene2d.ui.Label.LabelStyle();
-        ls.font = (com.badlogic.gdx.graphics.g2d.BitmapFont) skin.get("default-font",
-                com.badlogic.gdx.graphics.g2d.BitmapFont.class);
-        skin.add("default", ls);
-        com.badlogic.gdx.scenes.scene2d.ui.TextButton.TextButtonStyle tbs = new com.badlogic.gdx.scenes.scene2d.ui.TextButton.TextButtonStyle();
-        tbs.font = (com.badlogic.gdx.graphics.g2d.BitmapFont) skin.get("default-font",
-                com.badlogic.gdx.graphics.g2d.BitmapFont.class);
-        skin.add("default", tbs);
-
-        Table root = new Table();
-        root.setFillParent(true);
-        root.center();
-        stage.addActor(root);
-
-        // Create Apple-style rounded card background and pill button styles
-        NinePatchDrawable cardBg = createRoundedCardDrawable(new Color(0.13f, 0.13f, 0.13f, 0.88f), 18);
-        com.badlogic.gdx.scenes.scene2d.ui.TextButton.TextButtonStyle pillStyle = createPillButtonStyle();
-
-        Label title = new Label("Settings", skin);
-        title.setColor(Color.WHITE);
-        title.setFontScale(1.2f);
-        Label diffLabel = new Label("Difficulty:", skin);
-        diffLabel.setColor(new Color(1f, 1f, 1f, 0.85f));
-        diffLabel.setFontScale(1.0f);
-        TextButton easyBtn = new TextButton("Easy", pillStyle);
-        TextButton mediumBtn = new TextButton("Medium", pillStyle);
-        TextButton hardBtn = new TextButton("Hard", pillStyle);
-        TextButton back = new TextButton("Back", createPillButtonStyle());
-
-        // Enable transform and center origin for click animation effects
-        setupButtonTransform(easyBtn);
-        setupButtonTransform(mediumBtn);
-        setupButtonTransform(hardBtn);
-
-        // Card container with background
-        Table card = new Table();
-        card.setBackground(cardBg);
-        card.pad(24f);
-        root.add(card).width(560f).height(360f).center().row();
-
-        card.add(title).padBottom(22f).row();
-        card.add(diffLabel).padBottom(12f).row();
-        Table diffRow = new Table();
-        diffRow.center();
-        diffRow.add(easyBtn).width(160f).height(44f).pad(8f);
-        diffRow.add(mediumBtn).width(160f).height(44f).pad(8f);
-        diffRow.add(hardBtn).width(160f).height(44f).pad(8f);
-        card.add(diffRow).padBottom(26f).row();
-        card.add(back).width(220f).height(46f).padTop(8f).row();
-        // Single-select button group for difficulty
-        ButtonGroup<TextButton> group = new ButtonGroup<>(easyBtn, mediumBtn, hardBtn);
-        group.setMaxCheckCount(1);
-        group.setMinCheckCount(1);
-        group.setUncheckLast(true);
-
-        // Initialize selection based on current difficulty
-        GameDifficulty current = GameManager.getInstance().getDifficulty();
-        setCheckedForDifficulty(current, easyBtn, mediumBtn, hardBtn);
-
-        easyBtn.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                attemptChangeDifficulty(GameDifficulty.EASY, app, easyBtn, mediumBtn, hardBtn);
-            }
-        });
-
-        mediumBtn.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                attemptChangeDifficulty(GameDifficulty.MEDIUM, app, easyBtn, mediumBtn, hardBtn);
-            }
-        });
-
-        hardBtn.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                attemptChangeDifficulty(GameDifficulty.HARD, app, easyBtn, mediumBtn, hardBtn);
-            }
-        });
-
-        back.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                app.setScreen(new MainMenuScreen(app));
-            }
-        });
+        batch = new SpriteBatch();
+        
+        font = new BitmapFont();
+        font.setColor(Color.WHITE);
+        font.getData().setScale(1.5f);
+        glyphLayout = new GlyphLayout();
+        
+        // Try to load background (same as main menu or dedicated settings bg)
+        try {
+            backgroundTex = new Texture("UI/main_menu_background.png");
+        } catch (Exception e) {
+            backgroundTex = null;
+        }
+        
+        // Create selection highlight (semi-transparent box)
+        selectionHighlightTex = createSelectionHighlight();
+        
+        // Create PNG-based buttons
+        createButtons();
+        
+        // Setup dialog stage for confirmation popups
+        setupDialogStage();
     }
-
+    
     /**
-     * Attempt to change difficulty - shows confirmation popup if active run exists
+     * Create PNG-based buttons for difficulty selection and back.
+     * Modify positioning here to adjust layout.
      */
-    private void attemptChangeDifficulty(GameDifficulty newDiff, FearJosh app,
-            TextButton easy, TextButton medium, TextButton hard) {
-        GameManager gm = GameManager.getInstance();
-
-        // If difficulty is same, just apply visual change
-        if (gm.getDifficulty() == newDiff) {
-            setCheckedForDifficulty(newDiff, easy, medium, hard);
-            return;
-        }
-
-        // Check if there's an active run
-        if (gm.difficultyChangeRequiresNewGame()) {
-            // Show confirmation popup
-            showDifficultyChangeConfirmation(newDiff, app, easy, medium, hard);
-        } else {
-            // No active run - change freely
-            gm.setDifficulty(newDiff);
-            setCheckedForDifficulty(newDiff, easy, medium, hard);
-            applyClickEffect(getButtonForDifficulty(newDiff, easy, medium, hard));
-            System.out.println("[Settings] Difficulty changed to " + newDiff + " (no active run)");
-        }
+    private void createButtons() {
+        float centerX = VIRTUAL_WIDTH / 2f;
+        float startY = VIRTUAL_HEIGHT * 0.55f;
+        
+        // Easy button
+        easyBtn = new MenuButton(
+            "menu/settings_easy.png",
+            null,
+            centerX, startY,
+            SETTINGS_BUTTON_WIDTH, SETTINGS_BUTTON_HEIGHT
+        );
+        
+        // Normal button
+        normalBtn = new MenuButton(
+            "menu/settings_normal.png",
+            null,
+            centerX, startY - (SETTINGS_BUTTON_HEIGHT + SETTINGS_BUTTON_SPACING),
+            SETTINGS_BUTTON_WIDTH, SETTINGS_BUTTON_HEIGHT
+        );
+        
+        // Hard button
+        hardBtn = new MenuButton(
+            "menu/settings_hard.png",
+            null,
+            centerX, startY - 2 * (SETTINGS_BUTTON_HEIGHT + SETTINGS_BUTTON_SPACING),
+            SETTINGS_BUTTON_WIDTH, SETTINGS_BUTTON_HEIGHT
+        );
+        
+        // Back button (at bottom with extra spacing)
+        backBtn = new MenuButton(
+            "menu/settings_back.png",
+            null,
+            centerX, startY - 3.5f * (SETTINGS_BUTTON_HEIGHT + SETTINGS_BUTTON_SPACING),
+            SETTINGS_BUTTON_WIDTH, SETTINGS_BUTTON_HEIGHT
+        );
     }
-
-    /**
-     * Show modal confirmation dialog for difficulty change during active run
-     */
-    private void showDifficultyChangeConfirmation(final GameDifficulty newDiff, final FearJosh app,
-            final TextButton easy, final TextButton medium, final TextButton hard) {
-        // Create modal overlay
-        final Table overlay = new Table();
-        overlay.setFillParent(true);
-        overlay.setBackground(new NinePatchDrawable(new NinePatch(
-                createRoundedTexture(1, 1, 0, new Color(0f, 0f, 0f, 0.7f)), 0, 0, 0, 0)));
-
-        // Create dialog card
-        Table dialog = new Table();
-        NinePatchDrawable dialogBg = createRoundedCardDrawable(new Color(0.18f, 0.18f, 0.20f, 0.98f), 16);
-        dialog.setBackground(dialogBg);
-        dialog.pad(28f);
-
-        Label title = new Label("Warning", skin);
-        title.setColor(new Color(1f, 0.4f, 0.3f, 1f)); // Orange-red warning color
-        title.setFontScale(1.3f);
-
-        Label message = new Label(
-                "Changing difficulty will start a\nNEW GAME and delete your\ncurrent progress.\n\nContinue?",
-                skin);
-        message.setColor(Color.WHITE);
-        message.setAlignment(Align.center);
-        message.setFontScale(0.9f);
-
-        TextButton confirmBtn = new TextButton("New Game", createPillButtonStyle());
-        TextButton cancelBtn = new TextButton("Cancel", createPillButtonStyle());
-
-        dialog.add(title).padBottom(16f).row();
-        dialog.add(message).padBottom(24f).row();
-
-        Table buttons = new Table();
-        buttons.add(cancelBtn).width(140f).height(44f).pad(6f);
-        buttons.add(confirmBtn).width(140f).height(44f).pad(6f);
-        dialog.add(buttons).row();
-
-        overlay.add(dialog).width(480f).height(280f);
-
-        // Add overlay to stage (modal)
-        stage.addActor(overlay);
-        overlay.toFront(); // Ensure it's on top
-
-        // Cancel button - dismiss popup, revert selection
-        cancelBtn.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                overlay.remove(); // Dismiss popup
-                // Revert to current difficulty
-                GameDifficulty current = GameManager.getInstance().getDifficulty();
-                setCheckedForDifficulty(current, easy, medium, hard);
-                System.out.println("[Settings] Difficulty change CANCELLED");
-            }
-        });
-
-        // Confirm button - change difficulty AND start new game
-        confirmBtn.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                overlay.remove(); // Dismiss popup
-                // Change difficulty and start new game
-                GameManager gm = GameManager.getInstance();
-                gm.changeDifficultyAndStartNewGame(newDiff, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-                gm.setCurrentState(GameManager.GameState.PLAYING);
-                app.setScreen(new PlayScreen(app));
-                System.out.println("[Settings] Difficulty changed to " + newDiff + " with NEW GAME");
-            }
-        });
-    }
-
-    private TextButton getButtonForDifficulty(GameDifficulty diff, TextButton easy, TextButton medium,
-            TextButton hard) {
-        switch (diff) {
-            case EASY:
-                return easy;
-            case MEDIUM:
-                return medium;
-            case HARD:
-                return hard;
-            default:
-                return medium;
-        }
-    }
-
-    private void setupButtonTransform(TextButton b) {
-        b.setTransform(true);
-        b.setOrigin(Align.center);
-    }
-
-    private void applyClickEffect(final TextButton b) {
-        // Subtle scale pulse; color handled by button style states
-        b.clearActions();
-        b.addAction(Actions.sequence(
-                Actions.scaleTo(1.05f, 1.05f, 0.10f),
-                Actions.scaleTo(1f, 1f, 0.10f)));
-    }
-
-    private void setCheckedForDifficulty(GameDifficulty diff, TextButton easy, TextButton medium, TextButton hard) {
-        easy.setChecked(false);
-        medium.setChecked(false);
-        hard.setChecked(false);
-        switch (diff) {
-            case EASY:
-                easy.setChecked(true);
-                break;
-            case MEDIUM:
-                medium.setChecked(true);
-                break;
-            case HARD:
-                hard.setChecked(true);
-                break;
-        }
-    }
-
-    private NinePatchDrawable createRoundedCardDrawable(Color color, int radius) {
-        // Base pixmap used for scalable nine-patch card background
-        int size = 64;
-        Pixmap pm = new Pixmap(size, size, Pixmap.Format.RGBA8888);
-        pm.setBlending(Pixmap.Blending.SourceOver);
-        pm.setColor(color);
-        drawRoundedRect(pm, 0, 0, size, size, radius);
-        cardTex = new Texture(pm);
+    
+    private Texture createSelectionHighlight() {
+        int w = (int) SETTINGS_BUTTON_WIDTH + 20;
+        int h = (int) SETTINGS_BUTTON_HEIGHT + 10;
+        Pixmap pm = new Pixmap(w, h, Pixmap.Format.RGBA8888);
+        pm.setColor(new Color(0.2f, 0.6f, 1f, 0.3f)); // Blue highlight
+        pm.fill();
+        // Draw border
+        pm.setColor(new Color(0.3f, 0.7f, 1f, 0.8f));
+        pm.drawRectangle(0, 0, w, h);
+        pm.drawRectangle(1, 1, w - 2, h - 2);
+        Texture tex = new Texture(pm);
         pm.dispose();
-        NinePatch nine = new NinePatch(cardTex, radius, radius, radius, radius);
-        return new NinePatchDrawable(nine);
+        return tex;
     }
-
-    private com.badlogic.gdx.scenes.scene2d.ui.TextButton.TextButtonStyle createPillButtonStyle() {
-        // Pill drawables for up/over/down/checked
-        int w = 220, h = 48, r = h / 2;
-        pillUpTex = createRoundedTexture(w, h, r, new Color(1f, 1f, 1f, 0.06f));
-        pillOverTex = createRoundedTexture(w, h, r, new Color(1f, 1f, 1f, 0.12f));
-        pillDownTex = createRoundedTexture(w, h, r, new Color(1f, 1f, 1f, 0.18f));
-        pillCheckedTex = createRoundedTexture(w, h, r, new Color(0.04f, 0.52f, 1f, 0.92f)); // iOS blue
-
-        com.badlogic.gdx.scenes.scene2d.ui.TextButton.TextButtonStyle tbs = new com.badlogic.gdx.scenes.scene2d.ui.TextButton.TextButtonStyle();
-        tbs.font = (com.badlogic.gdx.graphics.g2d.BitmapFont) skin.get("default-font",
-                com.badlogic.gdx.graphics.g2d.BitmapFont.class);
+    
+    private void setupDialogStage() {
+        dialogStage = new Stage(viewport);
+        dialogSkin = new Skin();
+        dialogSkin.add("default-font", new BitmapFont());
+        
+        Label.LabelStyle ls = new Label.LabelStyle();
+        ls.font = dialogSkin.get("default-font", BitmapFont.class);
+        dialogSkin.add("default", ls);
+        
+        // Create button textures for dialog
+        dialogCardTex = createRoundedTexture(480, 280, 16, new Color(0.15f, 0.15f, 0.18f, 0.98f));
+        dialogBtnUpTex = createRoundedTexture(140, 44, 22, new Color(1f, 1f, 1f, 0.1f));
+        dialogBtnOverTex = createRoundedTexture(140, 44, 22, new Color(1f, 1f, 1f, 0.2f));
+        dialogBtnDownTex = createRoundedTexture(140, 44, 22, new Color(0.04f, 0.52f, 1f, 0.9f));
+        
+        TextButton.TextButtonStyle tbs = new TextButton.TextButtonStyle();
+        tbs.font = dialogSkin.get("default-font", BitmapFont.class);
         tbs.fontColor = Color.WHITE;
-        tbs.up = new NinePatchDrawable(new NinePatch(pillUpTex, r, r, r, r));
-        tbs.over = new NinePatchDrawable(new NinePatch(pillOverTex, r, r, r, r));
-        tbs.down = new NinePatchDrawable(new NinePatch(pillDownTex, r, r, r, r));
-        tbs.checked = new NinePatchDrawable(new NinePatch(pillCheckedTex, r, r, r, r));
-        tbs.checkedFontColor = Color.WHITE;
-        return tbs;
+        tbs.up = new NinePatchDrawable(new NinePatch(dialogBtnUpTex, 22, 22, 22, 22));
+        tbs.over = new NinePatchDrawable(new NinePatch(dialogBtnOverTex, 22, 22, 22, 22));
+        tbs.down = new NinePatchDrawable(new NinePatch(dialogBtnDownTex, 22, 22, 22, 22));
+        dialogSkin.add("default", tbs);
     }
-
+    
     private Texture createRoundedTexture(int w, int h, int radius, Color color) {
         Pixmap pm = new Pixmap(w, h, Pixmap.Format.RGBA8888);
         pm.setColor(color);
         drawRoundedRect(pm, 0, 0, w, h, radius);
         Texture tex = new Texture(pm);
         pm.dispose();
-        tex.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
         return tex;
     }
-
+    
     private void drawRoundedRect(Pixmap pm, int x, int y, int w, int h, int r) {
-        // Draw central rect
         pm.fillRectangle(x + r, y, w - 2 * r, h);
-        // left/right rects
         pm.fillRectangle(x, y + r, r, h - 2 * r);
         pm.fillRectangle(x + w - r, y + r, r, h - 2 * r);
-        // corners as filled circles
         pm.fillCircle(x + r, y + r, r);
         pm.fillCircle(x + w - r, y + r, r);
         pm.fillCircle(x + r, y + h - r, r);
@@ -344,7 +211,6 @@ public class SettingsScreen implements Screen {
 
     @Override
     public void show() {
-        // Play main menu music (same as main menu)
         AudioManager.getInstance().playMusic("Audio/Music/main_menu_music.wav", true);
     }
 
@@ -352,8 +218,209 @@ public class SettingsScreen implements Screen {
     public void render(float delta) {
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-        stage.act(delta);
-        stage.draw();
+        
+        uiCamera.update();
+        batch.setProjectionMatrix(uiCamera.combined);
+        
+        // Handle dialog if showing
+        if (showingDialog) {
+            Gdx.input.setInputProcessor(dialogStage);
+            dialogStage.act(delta);
+            dialogStage.draw();
+            return;
+        }
+        
+        // Normal settings screen
+        Gdx.input.setInputProcessor(null);
+        
+        float mouseX = getMouseX();
+        float mouseY = getMouseY();
+        
+        // Update button hover states
+        easyBtn.update(mouseX, mouseY);
+        normalBtn.update(mouseX, mouseY);
+        hardBtn.update(mouseX, mouseY);
+        backBtn.update(mouseX, mouseY);
+        
+        // Render
+        batch.begin();
+        
+        // Background
+        if (backgroundTex != null) {
+            batch.draw(backgroundTex, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        }
+        
+        // Title
+        font.setColor(Color.WHITE);
+        font.getData().setScale(2f);
+        glyphLayout.setText(font, "PENGATURAN");
+        font.draw(batch, "PENGATURAN", (VIRTUAL_WIDTH - glyphLayout.width) / 2f, VIRTUAL_HEIGHT - 60f);
+        
+        // Difficulty label
+        font.getData().setScale(1.2f);
+        font.setColor(new Color(0.8f, 0.8f, 0.85f, 1f));
+        glyphLayout.setText(font, "Pilih Kesulitan:");
+        font.draw(batch, "Pilih Kesulitan:", (VIRTUAL_WIDTH - glyphLayout.width) / 2f, VIRTUAL_HEIGHT * 0.68f);
+        
+        // Draw selection highlight behind current difficulty button
+        GameDifficulty current = GameManager.getInstance().getDifficulty();
+        MenuButton selectedBtn = getButtonForDifficulty(current);
+        if (selectedBtn != null && selectionHighlightTex != null) {
+            float hx = selectedBtn.getBounds().x - 10f;
+            float hy = selectedBtn.getBounds().y - 5f;
+            batch.draw(selectionHighlightTex, hx, hy);
+        }
+        
+        // Draw buttons
+        easyBtn.render(batch);
+        normalBtn.render(batch);
+        hardBtn.render(batch);
+        backBtn.render(batch);
+        
+        // Current difficulty indicator - BOTTOM-LEFT corner
+        font.getData().setScale(1f);
+        font.setColor(new Color(0.5f, 0.8f, 0.5f, 1f));
+        String currentText = "Current: " + current.name().substring(0, 1).toUpperCase() 
+                           + current.name().substring(1).toLowerCase();
+        float margin = 12f;
+        float currentX = margin;
+        float currentY = margin + font.getCapHeight();
+        font.draw(batch, currentText, currentX, currentY);
+        
+        batch.end();
+        
+        // Handle clicks
+        if (Gdx.input.justTouched() && isActive) {
+            handleClicks(mouseX, mouseY);
+        }
+        
+        // Handle keyboard
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            game.setScreen(new MainMenuScreen(game));
+        }
+    }
+    
+    private float getMouseX() {
+        return viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY())).x;
+    }
+    
+    private float getMouseY() {
+        return viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY())).y;
+    }
+    
+    private MenuButton getButtonForDifficulty(GameDifficulty diff) {
+        switch (diff) {
+            case EASY: return easyBtn;
+            case MEDIUM: return normalBtn;
+            case HARD: return hardBtn;
+            default: return normalBtn;
+        }
+    }
+    
+    private void handleClicks(float mouseX, float mouseY) {
+        // Easy
+        if (easyBtn.isClicked(mouseX, mouseY)) {
+            attemptChangeDifficulty(GameDifficulty.EASY);
+            return;
+        }
+        
+        // Normal
+        if (normalBtn.isClicked(mouseX, mouseY)) {
+            attemptChangeDifficulty(GameDifficulty.MEDIUM);
+            return;
+        }
+        
+        // Hard
+        if (hardBtn.isClicked(mouseX, mouseY)) {
+            attemptChangeDifficulty(GameDifficulty.HARD);
+            return;
+        }
+        
+        // Back
+        if (backBtn.isClicked(mouseX, mouseY)) {
+            game.setScreen(new MainMenuScreen(game));
+        }
+    }
+    
+    private void attemptChangeDifficulty(GameDifficulty newDiff) {
+        GameManager gm = GameManager.getInstance();
+        
+        // If same difficulty, do nothing
+        if (gm.getDifficulty() == newDiff) {
+            return;
+        }
+        
+        // Check if there's an active run
+        if (gm.difficultyChangeRequiresNewGame()) {
+            // Show confirmation dialog
+            pendingDifficulty = newDiff;
+            showConfirmationDialog();
+        } else {
+            // No active run - change freely
+            gm.setDifficulty(newDiff);
+            System.out.println("[Settings] Difficulty changed to " + newDiff);
+        }
+    }
+    
+    private void showConfirmationDialog() {
+        showingDialog = true;
+        dialogStage.clear();
+        
+        Table overlay = new Table();
+        overlay.setFillParent(true);
+        overlay.setBackground(new NinePatchDrawable(new NinePatch(
+            createRoundedTexture(1, 1, 0, new Color(0f, 0f, 0f, 0.7f)), 0, 0, 0, 0)));
+        
+        Table dialog = new Table();
+        dialog.setBackground(new NinePatchDrawable(new NinePatch(dialogCardTex, 16, 16, 16, 16)));
+        dialog.pad(28f);
+        
+        Label title = new Label("Warning", dialogSkin);
+        title.setColor(new Color(1f, 0.4f, 0.3f, 1f));
+        title.setFontScale(1.3f);
+        
+        Label message = new Label(
+            "Changing difficulty will start a\nNEW GAME and delete your\ncurrent progress.\n\nContinue?",
+            dialogSkin);
+        message.setColor(Color.WHITE);
+        message.setAlignment(Align.center);
+        
+        TextButton confirmBtn = new TextButton("New Game", dialogSkin);
+        TextButton cancelBtn = new TextButton("Cancel", dialogSkin);
+        
+        dialog.add(title).padBottom(16f).row();
+        dialog.add(message).padBottom(24f).row();
+        
+        Table buttons = new Table();
+        buttons.add(cancelBtn).width(140f).height(44f).pad(6f);
+        buttons.add(confirmBtn).width(140f).height(44f).pad(6f);
+        dialog.add(buttons).row();
+        
+        overlay.add(dialog);
+        dialogStage.addActor(overlay);
+        
+        cancelBtn.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                showingDialog = false;
+                pendingDifficulty = null;
+                dialogStage.clear();
+            }
+        });
+        
+        confirmBtn.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                showingDialog = false;
+                if (pendingDifficulty != null) {
+                    GameManager gm = GameManager.getInstance();
+                    gm.changeDifficultyAndStartNewGame(pendingDifficulty, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+                    gm.setCurrentState(GameManager.GameState.PLAYING);
+                    game.setScreen(new PlayScreen(game));
+                }
+                pendingDifficulty = null;
+            }
+        });
     }
 
     @Override
@@ -362,31 +429,31 @@ public class SettingsScreen implements Screen {
     }
 
     @Override
-    public void pause() {
-    }
+    public void pause() {}
 
     @Override
-    public void resume() {
-    }
+    public void resume() {}
 
     @Override
     public void hide() {
+        isActive = false;
     }
 
     @Override
     public void dispose() {
-        stage.dispose();
-        skin.dispose();
-        // Dispose generated textures
-        if (cardTex != null)
-            cardTex.dispose();
-        if (pillUpTex != null)
-            pillUpTex.dispose();
-        if (pillOverTex != null)
-            pillOverTex.dispose();
-        if (pillDownTex != null)
-            pillDownTex.dispose();
-        if (pillCheckedTex != null)
-            pillCheckedTex.dispose();
+        if (batch != null) batch.dispose();
+        if (font != null) font.dispose();
+        if (backgroundTex != null) backgroundTex.dispose();
+        if (selectionHighlightTex != null) selectionHighlightTex.dispose();
+        if (easyBtn != null) easyBtn.dispose();
+        if (normalBtn != null) normalBtn.dispose();
+        if (hardBtn != null) hardBtn.dispose();
+        if (backBtn != null) backBtn.dispose();
+        if (dialogStage != null) dialogStage.dispose();
+        if (dialogSkin != null) dialogSkin.dispose();
+        if (dialogCardTex != null) dialogCardTex.dispose();
+        if (dialogBtnUpTex != null) dialogBtnUpTex.dispose();
+        if (dialogBtnOverTex != null) dialogBtnOverTex.dispose();
+        if (dialogBtnDownTex != null) dialogBtnDownTex.dispose();
     }
 }

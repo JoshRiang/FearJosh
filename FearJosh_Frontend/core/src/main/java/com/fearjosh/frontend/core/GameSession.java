@@ -76,6 +76,14 @@ public class GameSession {
         this.active = active;
     }
     
+    /**
+     * End this session (called when player quits to menu without saving)
+     */
+    public void endSession() {
+        this.active = false;
+        System.out.println("[GameSession] Session " + sessionId + " ended");
+    }
+    
     public RoomId getCurrentRoomId() {
         return currentRoomId;
     }

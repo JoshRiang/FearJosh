@@ -3,6 +3,7 @@ package com.fearjosh.frontend.cutscene;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.fearjosh.frontend.FearJosh;
+import com.fearjosh.frontend.cutscene.cutscene_datas.EndingCutscenes;
 import com.fearjosh.frontend.cutscene.cutscene_datas.nol.nol;
 
 /**
@@ -36,9 +37,9 @@ public class CutsceneManager {
                         .duration(8.0f)
                         .build())
                 .withMusic("Audio/Music/intro_music.wav")
-                .addDialog("Narrator", "Welcome to FearJosh...")
-                .addDialog("Narrator", "A horror game where you must escape from Josh.")
-                .addDialog("Narrator", "Find items, solve puzzles, and survive.")
+                .addDialog("Narrator", "Selamat datang di FearJosh...")
+                .addDialog("Narrator", "Game horor dimana kamu harus kabur dari Josh.")
+                .addDialog("Narrator", "Temukan item, pecahkan teka-teki, dan bertahan hidup.")
                 .build();
 
         cutscenes.put("intro", introCutscene);
@@ -60,8 +61,8 @@ public class CutsceneManager {
                         .duration(10.0f)
                         .build())
                 .withMusic("Audio/Music/game_over_music.wav")
-                .addDialog("Josh", "You cannot escape me...")
-                .addDialog("You have been caught. Try again?")
+                .addDialog("Josh", "Kamu tidak bisa lari dariku...")
+                .addDialog("Kamu telah tertangkap. Coba lagi?")
                 .build();
 
         cutscenes.put("game_over", gameOverCutscene);
@@ -76,21 +77,21 @@ public class CutsceneManager {
                         .duration(12.0f)
                         .build())
                 .withMusic("Audio/Music/victory_music.wav")
-                .addDialog("Narrator", "You escaped!")
-                .addDialog("Narrator", "Congratulations on surviving FearJosh.")
-                .addDialog("Narrator", "But remember... he's always watching.")
+                .addDialog("Narrator", "Kamu berhasil kabur!")
+                .addDialog("Narrator", "Selamat atas keberhasilanmu bertahan di FearJosh.")
+                .addDialog("Narrator", "Tapi ingat... dia selalu mengawasimu.")
                 .build();
 
         cutscenes.put("victory", victoryCutscene);
 
         // Example 4: Dialog-only cutscene (no image/layers)
         CutsceneData tutorialCutscene = new CutsceneData.Builder("tutorial")
-                .addDialog("Tutorial", "Use WASD to move.")
-                .addDialog("Tutorial", "Press E to interact with objects.")
-                .addDialog("Tutorial", "Press Q to use items from your inventory.")
-                .addDialog("Tutorial", "Press 1-7 to select inventory slots.")
-                .addDialog("Tutorial", "Find batteries to recharge your flashlight.")
-                .addDialog("Tutorial", "Good luck!")
+                .addDialog("Tutorial", "Gunakan WASD untuk bergerak.")
+                .addDialog("Tutorial", "Tekan E untuk berinteraksi dengan objek.")
+                .addDialog("Tutorial", "Tekan Q untuk menggunakan item dari inventory.")
+                .addDialog("Tutorial", "Tekan 1-7 untuk memilih slot inventory.")
+                .addDialog("Tutorial", "Temukan baterai untuk mengisi ulang sentermu.")
+                .addDialog("Tutorial", "Semoga berhasil!")
                 .build();
 
         cutscenes.put("tutorial", tutorialCutscene);
@@ -119,16 +120,17 @@ public class CutsceneManager {
                         .duration(15.0f)
                         .build())
                 .withMusic("Audio/Music/tension_music.wav")
-                .addDialog("You sense something watching you...")
-                .addDialog("The air grows cold.")
-                .addDialog("You hear footsteps behind you.")
-                .addDialog("RUN!")
+                .addDialog("Kamu merasakan ada yang mengawasimu...")
+                .addDialog("Udara terasa makin dingin.")
+                .addDialog("Kamu mendengar langkah kaki di belakangmu.")
+                .addDialog("LARI!")
                 .build();
 
         cutscenes.put("first_encounter", encounterCutscene);
 
         // Register custom cutscene data dari folder cutscene_datas
         nol.registerCutscenes(this);
+        EndingCutscenes.registerCutscenes(this);
 
         System.out.println("[CutsceneManager] Initialized " + cutscenes.size + " cutscenes");
     }

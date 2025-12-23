@@ -1,6 +1,7 @@
 package com.fearjosh.frontend.core;
 
 import com.fearjosh.frontend.world.RoomId;
+import com.fearjosh.frontend.systems.AudioManager;
 
 /**
  * RoomDirector - Manages enemy presence and stalking behavior across rooms.
@@ -16,6 +17,27 @@ import com.fearjosh.frontend.world.RoomId;
  * - Adjacency-based navigation
  */
 public class RoomDirector {
+
+    // ==================== EVENT LISTENER ====================
+    
+    /**
+     * Listener interface for RoomDirector events (camera shake, etc.)
+     * PlayScreen should implement this to handle visual effects
+     */
+    public interface RoomDirectorEventListener {
+        void onCameraShake(float duration, float intensity);
+        void onDoorEntry(DoorDirection direction);
+    }
+    
+    private RoomDirectorEventListener eventListener;
+    
+    public void setEventListener(RoomDirectorEventListener listener) {
+        this.eventListener = listener;
+    }
+    
+    public RoomDirectorEventListener getEventListener() {
+        return this.eventListener;
+    }
 
     // ==================== TRACKING ====================
 
@@ -122,6 +144,20 @@ public class RoomDirector {
      * Main update loop - call this every frame
      */
     public void update(float delta) {
+        // === STORY STATE CHECK ===
+        // Don't update enemy behavior during STORY state (before meeting Josh)
+        GameManager gm = GameManager.getInstance();
+        if (gm.getCurrentState() == GameManager.GameState.STORY && !gm.hasMetJosh()) {
+            // Player hasn't met Josh yet, don't let enemy spawn
+            return;
+        }
+        
+        // === ENDING STATE CHECK ===
+        // Don't update during ending sequence
+        if (gm.getCurrentState() == GameManager.GameState.ENDING) {
+            return;
+        }
+        
         // Update grace timer
         if (graceTimer < playerGracePeriod) {
             graceTimer += delta;
@@ -484,23 +520,41 @@ public class RoomDirector {
 
     /**
      * Trigger audio cue when enemy is adjacent (breathing, footsteps)
+     * Plays directional audio hint based on where the enemy is relative to player
      */
     private void triggerAudioCue() {
-        // [TODO] Play audio based on entryDirection
-        // Example: "breathing_north.ogg" if enemy is in room.up()
+        AudioManager audio = AudioManager.getInstance();
+        
+        // Play ambient breathing/presence sound based on entry direction
+        // Using existing grunt sound as presence indicator
+        String audioPath = "Audio/Effect/monster_grunt_sound_effect.wav";
+        
+        // Play at reduced volume for distant presence hint
+        audio.playSound(audioPath, 0.3f);
 
         if (debugMode) {
-            System.out.println("[RoomDirector] AUDIO CUE: Enemy nearby!");
+            System.out.println("[RoomDirector] AUDIO CUE: Enemy nearby from direction " + entryDirection);
         }
     }
 
     /**
      * Trigger door entry event (sound, camera shake)
+     * Called when enemy physically enters player's room through a door
      */
     private void triggerDoorEntry() {
-        // [TODO] Play door opening sound
-        // [TODO] Trigger camera shake
-        // [TODO] Play heavy footsteps
+        AudioManager audio = AudioManager.getInstance();
+        
+        // Play door opening/slam sound (using existing footstep as door sound placeholder)
+        audio.playSound("Audio/Effect/footstep_sound_effect.wav", 0.8f);
+        
+        // Trigger camera shake via listener (PlayScreen handles actual shake)
+        if (eventListener != null) {
+            eventListener.onCameraShake(0.3f, 5f); // 0.3 second, 5 pixel intensity
+            eventListener.onDoorEntry(entryDirection);
+        }
+        
+        // Play heavy footsteps/monster entering sound
+        audio.playSound("Audio/Effect/monster_roar_sound_effect.wav", 0.6f);
 
         if (debugMode) {
             System.out.println("[RoomDirector] DOOR ENTRY triggered from " + entryDirection);

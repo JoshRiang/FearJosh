@@ -2,11 +2,13 @@ package com.fearjosh.frontend.render;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
 import com.fearjosh.frontend.core.GameManager;
 import com.fearjosh.frontend.difficulty.GameDifficulty;
+import com.fearjosh.frontend.world.RoomId;
 
 public class HudRenderer {
 
@@ -99,12 +101,45 @@ public class HudRenderer {
             BitmapFont font,
             float virtualWidth,
             float virtualHeight) {
-        GameDifficulty diff = GameManager.getInstance().getDifficulty();
-        String text = "Difficulty: " + diff.name().substring(0, 1).toUpperCase()
-                + diff.name().substring(1).toLowerCase();
+        GameManager gm = GameManager.getInstance();
         Color old = font.getColor();
         font.setColor(new Color(0.85f, 0.85f, 0.9f, 1f));
-        font.draw(batch, text, virtualWidth - 160f, virtualHeight - 8f);
+        
+        // Render current room name (top-right, below pause button)
+        RoomId currentRoom = gm.getCurrentRoomId();
+        if (currentRoom != null) {
+            String roomText = currentRoom.getDisplayName();
+            GlyphLayout roomLayout = new GlyphLayout(font, roomText);
+            float roomX = virtualWidth - roomLayout.width - 10f;
+            float roomY = virtualHeight - 45f;
+            font.draw(batch, roomText, roomX, roomY);
+        }
+        
+        // NOTE: Difficulty is now rendered separately via renderDifficultyText()
+        // to ensure it's always at bottom-left and rendered LAST
+        
+        font.setColor(old);
+    }
+    
+    /**
+     * Render difficulty text at FIXED bottom-left corner.
+     * This method MUST be called LAST in the render pipeline with uiCamera projection.
+     * Position is absolute screen coordinates, not affected by world camera or zoom.
+     */
+    public void renderDifficultyText(SpriteBatch batch, BitmapFont font) {
+        GameDifficulty diff = GameManager.getInstance().getDifficulty();
+        String diffName = diff.name();
+        String diffDisplay = diffName.equals("EASY") ? "Mudah" : diffName.equals("NORMAL") ? "Normal" : "Sulit";
+        String text = "Kesulitan: " + diffDisplay;
+        
+        // FIXED position: bottom-left corner with margin
+        float margin = 12f;
+        float x = margin;
+        float y = margin + font.getCapHeight(); // Safe distance from bottom edge
+        
+        Color old = font.getColor();
+        font.setColor(new Color(0.85f, 0.85f, 0.9f, 1f));
+        font.draw(batch, text, x, y);
         font.setColor(old);
     }
 }

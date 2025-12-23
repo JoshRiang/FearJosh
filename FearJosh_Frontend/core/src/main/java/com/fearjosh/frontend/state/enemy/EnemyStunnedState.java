@@ -2,8 +2,11 @@ package com.fearjosh.frontend.state.enemy;
 
 import com.fearjosh.frontend.entity.Enemy;
 import com.fearjosh.frontend.entity.Player;
-import com.fearjosh.frontend.world.Room;
 
+/**
+ * Stunned state - enemy is temporarily incapacitated.
+ * Room parameter removed; not used since stunned enemy doesn't move.
+ */
 public class EnemyStunnedState implements EnemyState {
 
     private float timer;
@@ -21,7 +24,7 @@ public class EnemyStunnedState implements EnemyState {
     }
 
     @Override
-    public void update(Enemy enemy, Player player, Room currentRoom, float delta) {
+    public void update(Enemy enemy, Player player, float delta) {
         timer -= delta;
         if (timer <= 0f) {
             // balik ke chasing (karena sudah dalam sight radius saat di-stun)

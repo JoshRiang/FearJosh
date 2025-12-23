@@ -8,19 +8,22 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import com.fearjosh.frontend.state.enemy.*;
-import com.fearjosh.frontend.world.Room;
 import com.fearjosh.frontend.world.RoomId;
 import com.fearjosh.frontend.systems.PathfindingSystem;
 import com.fearjosh.frontend.render.TiledMapManager;
 import java.util.List;
 import java.util.ArrayList;
 
+@SuppressWarnings("unused") // Some fields are kept for future features or legacy compatibility
 public class Enemy {
 
     private float x, y;
     private float width, height;
 
-    // FOOT HITBOX for TMX collision (same system as Player)
+    // DUAL HITBOX SYSTEM (same concept as Player)
+    // 1) BODY HITBOX - for capture/damage detection (full body)
+    private Rectangle bodyBounds;
+    // 2) FOOT HITBOX - for world collision (walls, furniture)
     private Rectangle footBounds;
 
     // TMX collision detection
@@ -115,8 +118,9 @@ public class Enemy {
         this.lastSeenX = x;
         this.lastSeenY = y;
         this.lastSeenRoomId = null; // akan di-set saat update pertama
+        this.bodyBounds = new Rectangle();
         this.footBounds = new Rectangle();
-        updateFootBounds(); // Initialize foot hitbox
+        updateHitboxes(); // Initialize both hitboxes
 
         searchingState = new EnemySearchingState();
         chasingState = new EnemyChasingState();
@@ -129,14 +133,23 @@ public class Enemy {
     }
 
     /**
-     * Update foot hitbox position (call after moving)
-     * Uses same proportions as Player foot hitbox
+     * Update BOTH hitboxes position (call after moving)
+     * DUAL HITBOX SYSTEM - same concept as Player, but sized for Josh
+     * 
+     * IMPORTANT: Uses Josh's own dimensions, NOT copied from Player!
+     * Josh is larger than Player (intimidation factor), so hitboxes scale proportionally.
      */
-    private void updateFootBounds() {
-        // Foot hitbox: bottom portion of sprite, centered horizontally
-        // Width: 60% of sprite width, Height: 20% of sprite height
-        float footW = width * 0.6f;
-        float footH = height * 0.2f;
+    private void updateHitboxes() {
+        // 1) BODY HITBOX - full sprite for capture/damage detection
+        // Uses full width/height of Josh sprite
+        bodyBounds.set(x, y, width, height);
+        
+        // 2) FOOT HITBOX - bottom portion for world collision
+        // Proportional to Josh's own size (NOT Player's values!)
+        // Width: 50% of Josh sprite width
+        // Height: 25% of Josh sprite height
+        float footW = width * 0.5f;
+        float footH = height * 0.25f;
         float footX = x + (width - footW) / 2f; // Center horizontally
         float footY = y; // Bottom of sprite
         
@@ -144,7 +157,17 @@ public class Enemy {
     }
 
     /**
-     * Get foot hitbox for collision detection
+     * Get BODY hitbox for capture/damage detection
+     * Use this when checking if Josh has caught the player
+     */
+    public Rectangle getBodyBounds() {
+        return bodyBounds;
+    }
+
+    /**
+     * Get FOOT hitbox for world collision detection
+     * Use this when checking collision with walls, furniture, obstacles
+     * (NOT for capture detection - use getBodyBounds() for that)
      */
     public Rectangle getFootBounds() {
         return footBounds;
@@ -257,12 +280,8 @@ public class Enemy {
             currentState.onEnter(this);
     }
 
-    public void update(Player player, Room room, float delta) {
-        // Set last seen room jika null
-        if (lastSeenRoomId == null) {
-            lastSeenRoomId = room.getId();
-        }
-
+    public void update(Player player, float delta) {
+        // lastSeenRoomId is now set externally via setLastSeenRoomId() by RoomDirector
         // OLD RESPAWN SYSTEM DISABLED - Now handled by RoomDirector
         // Despawn/respawn logic replaced with abstract/physical presence in
         // RoomDirector
@@ -277,16 +296,16 @@ public class Enemy {
         // Update animation time
         animationTime += delta;
 
-        // Update state normal
+        // Update state normal (TMX-based collision via move() method)
         if (currentState != null) {
-            currentState.update(this, player, room, delta);
+            currentState.update(this, player, delta);
         }
 
         // Update last seen position saat dalam chasing state
         if (currentStateType == EnemyStateType.CHASING) {
             lastSeenX = x;
             lastSeenY = y;
-            lastSeenRoomId = room.getId();
+            // lastSeenRoomId updated externally by RoomDirector
             despawnTimer = 0f;
         }
         // OLD DESPAWN TIMER DISABLED
@@ -429,10 +448,28 @@ public class Enemy {
         renderer.setColor(0f, 0f, 1f, 0.2f); // biru semi-transparent
         renderer.circle(getCenterX(), getCenterY(), VISION_RADIUS);
 
-        // Draw main hitbox
+        // Draw body hitbox (for capture detection) - RED
         Color stateColor = getStateColor();
         renderer.setColor(stateColor.r, stateColor.g, stateColor.b, 0.5f);
-        renderer.rect(x, y, width, height);
+        renderer.rect(bodyBounds.x, bodyBounds.y, bodyBounds.width, bodyBounds.height);
+        
+        // Draw foot hitbox (for world collision) - GREEN
+        renderer.setColor(0f, 1f, 0f, 0.8f);
+        renderer.rect(footBounds.x, footBounds.y, footBounds.width, footBounds.height);
+    }
+    
+    /**
+     * DEBUG: Render hitboxes for visual debugging (similar to Player)
+     * Call from PlayScreen with ShapeRenderer
+     */
+    public void debugRenderHitboxes(ShapeRenderer sr) {
+        // Body hitbox - RED (untuk capture detection)
+        sr.setColor(Color.RED);
+        sr.rect(bodyBounds.x, bodyBounds.y, bodyBounds.width, bodyBounds.height);
+
+        // Foot hitbox - GREEN (untuk world collision)
+        sr.setColor(Color.GREEN);
+        sr.rect(footBounds.x, footBounds.y, footBounds.width, footBounds.height);
     }
 
     private Color getStateColor() {
@@ -449,7 +486,8 @@ public class Enemy {
     }
 
     // Movement dengan collision detection - SMOOTH DIAGONAL MOVEMENT
-    public void move(float dx, float dy, Room room) {
+    // Room parameter removed; uses TMX collision via TiledMapManager
+    public void move(float dx, float dy) {
         // Track movement direction for sprite animation
         lastDx = dx;
         lastDy = dy;
@@ -460,22 +498,22 @@ public class Enemy {
         // Try full diagonal movement first
         x = oldX + dx;
         y = oldY + dy;
-        updateFootBounds(); // Update foot hitbox after position change
+        updateHitboxes(); // Update both hitboxes after position change
 
-        if (collidesWithFurniture(room)) {
+        if (collidesWithFurniture()) {
             // Full diagonal blocked, try sliding along obstacles
 
             // Try X-only movement (slide horizontally)
             x = oldX + dx;
             y = oldY;
-            updateFootBounds();
-            boolean xBlocked = collidesWithFurniture(room);
+            updateHitboxes();
+            boolean xBlocked = collidesWithFurniture();
 
             // Try Y-only movement (slide vertically)
             x = oldX;
             y = oldY + dy;
-            updateFootBounds();
-            boolean yBlocked = collidesWithFurniture(room);
+            updateHitboxes();
+            boolean yBlocked = collidesWithFurniture();
 
             // Apply best available movement
             if (!xBlocked && !yBlocked) {
@@ -499,7 +537,7 @@ public class Enemy {
                 x = oldX;
                 y = oldY;
             }
-            updateFootBounds(); // Final update after position resolved
+            updateHitboxes(); // Final update after position resolved
         }
         // If no collision, position already set to (oldX+dx, oldY+dy)
     }
@@ -507,8 +545,9 @@ public class Enemy {
     /**
      * Collision detection using FOOT HITBOX (same as Player)
      * Checks all 4 corners and center of foot hitbox for walkability
+     * Uses TMX collision via TiledMapManager (no Room parameter needed)
      */
-    private boolean collidesWithFurniture(Room room) {
+    private boolean collidesWithFurniture() {
         // Check TMX collision using foot hitbox (same as Player)
         if (tiledMapManager != null && tiledMapManager.hasCurrentMap()) {
             // Check all 4 corners and center of foot hitbox
@@ -601,6 +640,13 @@ public class Enemy {
         return lastSeenRoomId;
     }
 
+    /**
+     * Set last seen room (called by RoomDirector when enemy enters a room)
+     */
+    public void setLastSeenRoomId(RoomId roomId) {
+        this.lastSeenRoomId = roomId;
+    }
+
     public boolean isDespawned() {
         return isDespawned;
     }
@@ -609,21 +655,21 @@ public class Enemy {
 
     /**
      * Calculate path to target using A* pathfinding
+     * Room parameter removed; pathfinding uses TMX via TiledMapManager
      * 
      * @param targetX     Target X coordinate
      * @param targetY     Target Y coordinate
-     * @param room        Current room
      * @param worldWidth  World width
      * @param worldHeight World height
      */
-    public void calculatePathTo(float targetX, float targetY, Room room, float worldWidth, float worldHeight) {
+    public void calculatePathTo(float targetX, float targetY, float worldWidth, float worldHeight) {
         pathTargetX = targetX;
         pathTargetY = targetY;
 
         List<float[]> rawPath = PathfindingSystem.findPath(
                 getCenterX(), getCenterY(),
                 targetX, targetY,
-                room, worldWidth, worldHeight);
+                tiledMapManager, worldWidth, worldHeight);
 
         // Simplify path to reduce waypoints
         currentPath = PathfindingSystem.simplifyPath(rawPath);
@@ -638,14 +684,14 @@ public class Enemy {
     /**
      * Move along current path towards target
      * Call this from update loop when in chasing state
+     * Room parameter removed; uses TMX collision via move()
      * 
      * @param delta       Delta time
-     * @param room        Current room
      * @param worldWidth  World width
      * @param worldHeight World height
      * @return true if moving along path, false if path exhausted
      */
-    public boolean followPath(float delta, Room room, float worldWidth, float worldHeight) {
+    public boolean followPath(float delta, float worldWidth, float worldHeight) {
         // No path
         if (currentPath.isEmpty()) {
             return false;
@@ -654,7 +700,7 @@ public class Enemy {
         // Recalculate path periodically
         pathRecalculateTimer += delta;
         if (pathRecalculateTimer >= PATH_RECALCULATE_INTERVAL) {
-            calculatePathTo(pathTargetX, pathTargetY, room, worldWidth, worldHeight);
+            calculatePathTo(pathTargetX, pathTargetY, worldWidth, worldHeight);
         }
 
         // Get current waypoint
@@ -686,8 +732,8 @@ public class Enemy {
         dx = dx * speed;
         dy = dy * speed;
 
-        // Move with BOTH X and Y applied together (true diagonal)
-        move(dx, dy, room);
+        // Move with BOTH X and Y applied together (true diagonal, TMX collision)
+        move(dx, dy);
         return true;
     }
 
