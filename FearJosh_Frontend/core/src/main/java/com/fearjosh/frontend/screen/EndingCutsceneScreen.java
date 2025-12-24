@@ -270,25 +270,13 @@ public class EndingCutsceneScreen implements Screen {
     private void finishEnding() {
         stopAllAudio();
         
-        resetGameState();
+        // Calculate elapsed time
+        long completionTimeSeconds = GameManager.getInstance().getElapsedTimeSeconds();
         
-        System.out.println("[EndingCutscene] Returning to main menu");
-        game.setScreen(new MainMenuScreen(game));
-    }
-
-    private void resetGameState() {
-        GameManager gm = GameManager.getInstance();
+        System.out.println("[EndingCutscene] Going to leaderboard - Time: " + completionTimeSeconds + "s");
         
-        if (gm.getCurrentSession() != null) {
-            gm.getCurrentSession().setActive(false);
-        }
-        
-        gm.resetInventory();
-        KeyManager.getInstance().reset();
-        
-        gm.setCurrentState(GameManager.GameState.MAIN_MENU);
-        
-        System.out.println("[EndingCutscene] Game state reset for new game");
+        // Go to leaderboard screen with ESCAPE ending type (score will be submitted)
+        game.setScreen(new LeaderboardScreen(game, LeaderboardScreen.EndingType.ESCAPE, completionTimeSeconds));
     }
 
     @Override

@@ -206,7 +206,7 @@ public class MainMenuScreen implements Screen {
         
         if (newGameBtn.isClicked(mouseX, mouseY)) {
             isActive = false;
-            startNewGame();
+            goToNameInput();
             return;
         }
         
@@ -235,36 +235,19 @@ public class MainMenuScreen implements Screen {
         if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
             if (!isActive) return;
             isActive = false;
-            startNewGame();
+            goToNameInput();
         }
     }
     
+    private void goToNameInput() {
+        // Go to name input screen before starting new game
+        game.setScreen(new NameInputScreen(game));
+        System.out.println("[MainMenu] Going to name input screen");
+    }
+    
     private void startNewGame() {
-        GameManager.getInstance().startNewGame(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-        GameManager.getInstance().setCurrentState(GameManager.GameState.STORY);
-
-        Screen playScreen = new PlayScreen(game);
-
-        if (GameManager.getInstance().isTestingMode()) {
-            GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
-            GameManager.getInstance().setHasMetJosh(true);
-            game.setScreen(playScreen);
-            System.out.println("[MainMenu] NEW GAME - TESTING MODE: skipping cutscenes");
-        } else {
-            Screen cutscene9 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_9", playScreen);
-            Screen cutscene8 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_8", cutscene9);
-            Screen cutscene7 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_7", cutscene8);
-            Screen cutscene6 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_6", cutscene7);
-            Screen cutscene5 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_5", cutscene6);
-            Screen cutscene4 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_4", cutscene5);
-            Screen cutscene3 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_3", cutscene4);
-            Screen cutscene2 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_2", cutscene3);
-            Screen cutscene1 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_1", cutscene2);
-            Screen blackTransition = new BlackTransitionScreen(game, cutscene1, 8f,
-                    "Audio/Music/sad_cutscene_piano_violin.wav");
-            game.setScreen(blackTransition);
-            System.out.println("[MainMenu] NEW GAME - cutscene chain -> STORY mode");
-        }
+        // This method is kept for compatibility but now we go through NameInputScreen
+        goToNameInput();
     }
     
     private void resumeGame() {

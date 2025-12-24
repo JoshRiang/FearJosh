@@ -262,25 +262,13 @@ public class GameOverCutsceneScreen implements Screen {
     private void finishGameOver() {
         AudioManager.getInstance().stopMusic();
         
-        resetGameState();
+        // Calculate elapsed time
+        long completionTimeSeconds = GameManager.getInstance().getElapsedTimeSeconds();
         
-        System.out.println("[GameOverCutscene] Returning to main menu");
-        game.setScreen(new MainMenuScreen(game));
-    }
-
-    private void resetGameState() {
-        GameManager gm = GameManager.getInstance();
+        System.out.println("[GameOverCutscene] Going to leaderboard - Time: " + completionTimeSeconds + "s");
         
-        if (gm.getCurrentSession() != null) {
-            gm.getCurrentSession().setActive(false);
-        }
-        
-        gm.resetInventory();
-        KeyManager.getInstance().reset();
-        
-        gm.setCurrentState(GameManager.GameState.MAIN_MENU);
-        
-        System.out.println("[GameOverCutscene] Game state reset for new game");
+        // Go to leaderboard screen with GAME_OVER ending type (score will NOT be submitted)
+        game.setScreen(new LeaderboardScreen(game, LeaderboardScreen.EndingType.GAME_OVER, completionTimeSeconds));
     }
 
     @Override

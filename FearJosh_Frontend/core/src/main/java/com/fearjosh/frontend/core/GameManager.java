@@ -26,6 +26,10 @@ public class GameManager {
     private boolean hasMetJosh = false;
     private boolean storyObjectiveIsEscape = false;
 
+    // PLAYER INFO
+    private String playerName = "";
+    private String playerId = "";
+
     private static GameManager INSTANCE;
 
     // SESSION
@@ -406,5 +410,40 @@ public class GameManager {
 
     public boolean isGameOver() {
         return currentLives <= 0;
+    }
+
+    // PLAYER INFO GETTERS/SETTERS
+    public String getPlayerName() {
+        return playerName;
+    }
+
+    public void setPlayerName(String name) {
+        this.playerName = name;
+        // Generate player ID based on name and timestamp
+        this.playerId = name.toLowerCase().replaceAll("\\s+", "_") + "_" + System.currentTimeMillis();
+        System.out.println("[GameManager] Player name set to: " + name + ", ID: " + playerId);
+    }
+    
+    /**
+     * Set player name and custom player ID (for returning players)
+     */
+    public void setPlayerInfo(String name, String id) {
+        this.playerName = name;
+        this.playerId = id;
+        System.out.println("[GameManager] Player info set - Name: " + name + ", ID: " + id);
+    }
+
+    public String getPlayerId() {
+        return playerId;
+    }
+
+    /**
+     * Get elapsed time in seconds since game session started
+     */
+    public long getElapsedTimeSeconds() {
+        if (currentSession != null) {
+            return (System.currentTimeMillis() - currentSession.getStartTimeMs()) / 1000;
+        }
+        return 0;
     }
 }
