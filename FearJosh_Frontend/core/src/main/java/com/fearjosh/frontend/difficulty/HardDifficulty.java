@@ -1,13 +1,5 @@
 package com.fearjosh.frontend.difficulty;
 
-/**
- * Hard difficulty - untuk pemain yang ingin tantangan.
- * - Speed sedikit lebih lambat
- * - Stamina drain lebih cepat
- * - Battery drain lebih cepat
- * - Vision radius lebih sempit
- * - Fog lebih tebal
- */
 public class HardDifficulty implements DifficultyStrategy {
     @Override
     public float walkSpeedMultiplier() {
@@ -16,7 +8,7 @@ public class HardDifficulty implements DifficultyStrategy {
 
     @Override
     public float runSpeedMultiplier() {
-        return 1.33f;  // Sprint gives 40% speed boost - CUSTOM: ubah angka ini (0.95-2.0)
+        return 1.33f;
     }
 
     @Override

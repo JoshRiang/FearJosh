@@ -22,9 +22,6 @@ public class CameraController {
         this.worldHeight = worldHeight;
     }
     
-    /**
-     * Update world bounds (used when switching to rooms with different sizes)
-     */
     public void setWorldBounds(float width, float height) {
         this.worldWidth = width;
         this.worldHeight = height;
@@ -38,27 +35,16 @@ public class CameraController {
         return worldHeight;
     }
     
-    /**
-     * Trigger camera shake effect.
-     * @param duration How long the shake lasts in seconds
-     * @param intensity How strong the shake is (in pixels)
-     */
     public void shake(float duration, float intensity) {
         this.shakeDuration = duration;
         this.shakeIntensity = intensity;
         this.shakeTimer = 0f;
     }
     
-    /**
-     * Check if camera is currently shaking
-     */
     public boolean isShaking() {
         return shakeTimer < shakeDuration;
     }
     
-    /**
-     * Update shake effect
-     */
     private void updateShake(float delta) {
         if (shakeTimer < shakeDuration) {
             shakeTimer += delta;
@@ -91,29 +77,28 @@ public class CameraController {
         float targetX = player.getCenterX();
         float targetY = player.getCenterY();
 
-        // Margin to include walls rendered outside room bounds
-        float wallMargin = 100f; // Same as WALL_THICKNESS in PlayScreen
+        // wall margin
+        float wallMargin = 100f;
         
-        // Extended world bounds to include walls
+        // bounds
         float extendedWidth = worldWidth;
         float extendedHeight = worldHeight + wallMargin; // Include top wall
 
-        // If room is smaller than viewport, center the camera on the room
         float camX, camY;
         
         if (extendedWidth <= viewW) {
-            // Room is smaller than view width - center horizontally
+            // center X
             camX = worldWidth / 2f;
         } else {
-            // Normal clamping - allow camera to see edges
+            // clamp X
             camX = MathUtils.clamp(targetX, halfW, worldWidth - halfW);
         }
         
         if (extendedHeight <= viewH) {
-            // Room is smaller than view height - center vertically (offset for top wall)
+            // center Y
             camY = (worldHeight + wallMargin) / 2f - wallMargin / 2f;
         } else {
-            // Normal clamping - allow camera to show top wall when at top
+            // clamp Y
             float minY = halfH;
             float maxY = worldHeight + wallMargin - halfH;
             camY = MathUtils.clamp(targetY, minY, maxY);

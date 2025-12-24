@@ -1,0 +1,16 @@
+{
+    "folders": [
+        {
+            "path": "FearJosh_Frontend"
+        },
+        {
+            "path": "FearJosh_Backend"
+        }
+    ],
+    "settings": {
+        "java.configuration.updateBuildConfiguration": "disabled",
+        "java.import.maven.enabled": true,
+        "java.import.gradle.enabled": true,
+        "java.autobuild.enabled": true
+    }
+}

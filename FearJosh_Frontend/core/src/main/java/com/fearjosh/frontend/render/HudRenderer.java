@@ -31,7 +31,7 @@ public class HudRenderer {
         float startY = virtualHeight - margin - barHeight;
         float totalWidth = 4 * segmentWidth + 3 * gap;
 
-        // Battery segments
+        // Battery
         float batteryFrac = battery / batteryMax;
         if (batteryFrac < 0f)
             batteryFrac = 0f;
@@ -54,7 +54,7 @@ public class HudRenderer {
             renderer.rect(x, startY, segmentWidth, barHeight);
         }
 
-        // Stamina bar
+        // Stamina
         float staminaMaxWidth = totalWidth;
         float staminaX = margin;
         float staminaY = startY - barHeight - 6f;
@@ -72,17 +72,16 @@ public class HudRenderer {
         renderer.setColor(Color.CYAN);
         renderer.rect(staminaX, staminaY, staminaWidth, barHeight);
 
-        // Pause button (top-right corner)
+        // Pause button
         float btnSize = 28f;
         float btnX = virtualWidth - margin - btnSize;
         float btnY = virtualHeight - margin - btnSize;
         pauseButtonBounds.set(btnX, btnY, btnSize, btnSize);
 
-        // Button background
         renderer.setColor(0.15f, 0.15f, 0.18f, 1f);
         renderer.rect(btnX, btnY, btnSize, btnSize);
 
-        // Pause icon: two vertical bars
+        // Pause icon
         float barW = 6f;
         float barH = btnSize - 10f;
         float barY = btnY + 5f;
@@ -105,7 +104,7 @@ public class HudRenderer {
         Color old = font.getColor();
         font.setColor(new Color(0.85f, 0.85f, 0.9f, 1f));
         
-        // Render current room name (top-right, below pause button)
+        // Room name
         RoomId currentRoom = gm.getCurrentRoomId();
         if (currentRoom != null) {
             String roomText = currentRoom.getDisplayName();
@@ -115,27 +114,19 @@ public class HudRenderer {
             font.draw(batch, roomText, roomX, roomY);
         }
         
-        // NOTE: Difficulty is now rendered separately via renderDifficultyText()
-        // to ensure it's always at bottom-left and rendered LAST
-        
         font.setColor(old);
     }
     
-    /**
-     * Render difficulty text at FIXED bottom-left corner.
-     * This method MUST be called LAST in the render pipeline with uiCamera projection.
-     * Position is absolute screen coordinates, not affected by world camera or zoom.
-     */
+    // Difficulty text
     public void renderDifficultyText(SpriteBatch batch, BitmapFont font) {
         GameDifficulty diff = GameManager.getInstance().getDifficulty();
         String diffName = diff.name();
         String diffDisplay = diffName.equals("EASY") ? "Mudah" : diffName.equals("NORMAL") ? "Normal" : "Sulit";
         String text = "Kesulitan: " + diffDisplay;
         
-        // FIXED position: bottom-left corner with margin
         float margin = 12f;
         float x = margin;
-        float y = margin + font.getCapHeight(); // Safe distance from bottom edge
+        float y = margin + font.getCapHeight();
         
         Color old = font.getColor();
         font.setColor(new Color(0.85f, 0.85f, 0.9f, 1f));

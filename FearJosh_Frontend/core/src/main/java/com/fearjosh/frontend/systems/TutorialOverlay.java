@@ -10,10 +10,6 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Tutorial overlay system for displaying tutorial messages during STORY state.
- * Shows dialog-style text overlays teaching player the controls.
- */
 public class TutorialOverlay {
 
     private static TutorialOverlay instance;
@@ -52,7 +48,6 @@ public class TutorialOverlay {
     }
 
     private void initializeTutorialSteps() {
-        // Tutorial steps based on game requirements
         steps.add(new TutorialStep(
                 "Gunakan WASD untuk bergerak.",
                 "Movement",
@@ -79,9 +74,6 @@ public class TutorialOverlay {
                 4.0f));
     }
 
-    /**
-     * Start the tutorial sequence
-     */
     public void start() {
         currentStepIndex = 0;
         isActive = true;
@@ -92,9 +84,6 @@ public class TutorialOverlay {
         System.out.println("[Tutorial] Started");
     }
 
-    /**
-     * Reset tutorial state (for new game)
-     */
     public void reset() {
         currentStepIndex = 0;
         isActive = false;
@@ -104,18 +93,12 @@ public class TutorialOverlay {
         waitingForInput = false;
     }
 
-    /**
-     * Skip the entire tutorial
-     */
     public void skip() {
         isActive = false;
         isComplete = true;
         System.out.println("[Tutorial] Skipped");
     }
 
-    /**
-     * Update tutorial state
-     */
     public void update(float delta) {
         if (!isActive || isComplete)
             return;
@@ -130,20 +113,18 @@ public class TutorialOverlay {
         TutorialStep currentStep = steps.get(currentStepIndex);
         displayTimer += delta;
 
-        // Fade in
         if (displayTimer < FADE_DURATION) {
             fadeAlpha = displayTimer / FADE_DURATION;
         } else {
             fadeAlpha = 1f;
         }
 
-        // Auto-advance or wait for input
         if (currentStep.autoAdvance) {
             if (displayTimer >= currentStep.displayDuration) {
                 nextStep();
             }
         } else {
-            waitingForInput = displayTimer >= 0.5f; // Small delay before allowing skip
+            waitingForInput = displayTimer >= 0.5f;
             if (waitingForInput && (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)
                     || Gdx.input.isKeyJustPressed(Input.Keys.ENTER))) {
                 nextStep();
@@ -166,9 +147,6 @@ public class TutorialOverlay {
         }
     }
 
-    /**
-     * Render tutorial overlay
-     */
     public void render(ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font,
             float screenWidth, float screenHeight) {
         if (!isActive || isComplete || currentStepIndex >= steps.size())
@@ -176,7 +154,6 @@ public class TutorialOverlay {
 
         TutorialStep currentStep = steps.get(currentStepIndex);
 
-        // Draw semi-transparent background box at bottom
         float boxHeight = 100f;
         float boxY = 20f;
         float boxPadding = 20f;
@@ -186,23 +163,19 @@ public class TutorialOverlay {
         shapeRenderer.rect(boxPadding, boxY, screenWidth - boxPadding * 2, boxHeight);
         shapeRenderer.end();
 
-        // Draw border
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(0.8f, 0.1f, 0.1f, fadeAlpha);
         shapeRenderer.rect(boxPadding, boxY, screenWidth - boxPadding * 2, boxHeight);
         shapeRenderer.end();
 
-        // Draw text
         batch.begin();
         font.setColor(1f, 1f, 1f, fadeAlpha);
 
-        // Main text
         GlyphLayout mainLayout = new GlyphLayout(font, currentStep.mainText);
         float mainX = (screenWidth - mainLayout.width) / 2f;
         float mainY = boxY + boxHeight - 25f;
         font.draw(batch, currentStep.mainText, mainX, mainY);
 
-        // Subtitle text
         if (currentStep.subtitle != null && !currentStep.subtitle.isEmpty()) {
             font.setColor(0.8f, 0.8f, 0.8f, fadeAlpha * 0.8f);
             GlyphLayout subLayout = new GlyphLayout(font, currentStep.subtitle);
@@ -211,7 +184,6 @@ public class TutorialOverlay {
             font.draw(batch, currentStep.subtitle, subX, subY);
         }
 
-        // Continue hint
         if (!currentStep.autoAdvance && waitingForInput) {
             font.setColor(0.6f, 0.6f, 0.6f, fadeAlpha * 0.7f);
             String hintText = "[SPACE / ENTER untuk lanjut]";
@@ -232,9 +204,6 @@ public class TutorialOverlay {
         return isComplete;
     }
 
-    /**
-     * Tutorial step data class
-     */
     private static class TutorialStep {
         String mainText;
         String subtitle;
@@ -245,10 +214,10 @@ public class TutorialOverlay {
             this.mainText = mainText;
             this.subtitle = subtitle;
             this.displayDuration = duration;
-            this.autoAdvance = true; // Auto-advance by default for smoother experience
+            this.autoAdvance = true;
         }
 
-        @SuppressWarnings("unused") // Alternative constructor for custom auto-advance behavior
+        @SuppressWarnings("unused")
         TutorialStep(String mainText, String subtitle, float duration, boolean autoAdvance) {
             this.mainText = mainText;
             this.subtitle = subtitle;

@@ -18,10 +18,6 @@ import com.fearjosh.frontend.difficulty.GameDifficulty;
 import com.fearjosh.frontend.systems.AudioManager;
 import com.fearjosh.frontend.ui.MenuButton;
 
-/**
- * Main menu screen with PNG-based buttons.
- * Uses MenuButton class for New Game, Resume (if session exists), Settings, Quit.
- */
 public class MainMenuScreen implements Screen {
 
     private static final float VIRTUAL_WIDTH = 800f;
@@ -33,12 +29,12 @@ public class MainMenuScreen implements Screen {
     private FitViewport viewport;
     
     private Texture backgroundTex;
-    private BitmapFont font; // Fallback font for difficulty label and Resume text
+    private BitmapFont font;
     private GlyphLayout glyphLayout;
     
-    // PNG-based menu buttons
+    // Buttons
     private MenuButton newGameBtn;
-    private MenuButton resumeBtn; // Only shown if hasActiveSession
+    private MenuButton resumeBtn;
     private MenuButton settingsBtn;
     private MenuButton quitBtn;
     
@@ -52,13 +48,11 @@ public class MainMenuScreen implements Screen {
         viewport = new FitViewport(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, uiCamera);
         batch = new SpriteBatch();
         
-        // Fallback font for difficulty label
         font = new BitmapFont();
         font.setColor(Color.WHITE);
         font.getData().setScale(1.2f);
         glyphLayout = new GlyphLayout();
 
-        // Load background image
         try {
             backgroundTex = new Texture("UI/main_menu_background.png");
         } catch (Exception e) {
@@ -66,24 +60,19 @@ public class MainMenuScreen implements Screen {
             backgroundTex = null;
         }
 
-        // Check session state
         hasSession = GameManager.getInstance().hasActiveSession();
-        
-        // Create PNG-based buttons
         createButtons();
     }
 
     private void createButtons() {
         float centerX = VIRTUAL_WIDTH / 2f;
-        float startY = VIRTUAL_HEIGHT * 0.55f; // Start from upper area
+        float startY = VIRTUAL_HEIGHT * 0.55f;
         
-        // Use MenuButton constants for consistent sizing
         float btnW = MenuButton.MENU_BUTTON_WIDTH;
         float btnH = MenuButton.MENU_BUTTON_HEIGHT;
         
         int buttonIndex = 0;
         
-        // New Game button
         newGameBtn = new MenuButton(
             "menu/mainmenu_newgame.png",
             null,
@@ -92,10 +81,9 @@ public class MainMenuScreen implements Screen {
         );
         buttonIndex++;
         
-        // Resume button (only if session exists)
         if (hasSession) {
             resumeBtn = new MenuButton(
-                "menu/mainmenu_newgame.png", // Reuse newgame as placeholder texture
+                "menu/mainmenu_newgame.png",
                 null,
                 centerX, MenuButton.getStackedY(startY, buttonIndex),
                 btnW, btnH
@@ -103,7 +91,6 @@ public class MainMenuScreen implements Screen {
             buttonIndex++;
         }
         
-        // Settings button
         settingsBtn = new MenuButton(
             "menu/mainmenu_settings.png",
             null,
@@ -112,7 +99,6 @@ public class MainMenuScreen implements Screen {
         );
         buttonIndex++;
         
-        // Quit button
         quitBtn = new MenuButton(
             "menu/mainmenu_quit.png",
             null,
@@ -125,11 +111,7 @@ public class MainMenuScreen implements Screen {
     public void show() {
         isActive = true;
         GameManager.getInstance().setCurrentState(GameManager.GameState.MAIN_MENU);
-        
-        // Play main menu music (looping)
         AudioManager.getInstance().playMusic("Audio/Music/main_menu_music.wav", true);
-        
-        // Play background ambient sound
         AudioManager.getInstance().playMusic("Audio/background_menu.wav", true);
     }
 
@@ -138,18 +120,14 @@ public class MainMenuScreen implements Screen {
         if (!GameManager.getInstance().isInMenu()) return;
         if (!isActive) return;
 
-        // Clear screen
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        // Update camera
         uiCamera.update();
         batch.setProjectionMatrix(uiCamera.combined);
 
-        // Handle input
         handleInput();
 
-        // Update buttons
         float mouseX = getMouseX();
         float mouseY = getMouseY();
         
@@ -158,20 +136,15 @@ public class MainMenuScreen implements Screen {
         settingsBtn.update(mouseX, mouseY);
         quitBtn.update(mouseX, mouseY);
 
-        // Render
         batch.begin();
         
-        // Draw background
         if (backgroundTex != null) {
             batch.draw(backgroundTex, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
         }
         
-        // Draw buttons
         newGameBtn.render(batch);
         if (resumeBtn != null) {
-            // Resume uses text overlay since no PNG exists
             resumeBtn.render(batch);
-            // Draw "LANJUT" text on top
             font.setColor(Color.WHITE);
             glyphLayout.setText(font, "LANJUT");
             float textX = resumeBtn.getBounds().x + (resumeBtn.getBounds().width - glyphLayout.width) / 2f;
@@ -181,18 +154,18 @@ public class MainMenuScreen implements Screen {
         settingsBtn.render(batch);
         quitBtn.render(batch);
         
-        // Draw difficulty label at BOTTOM-LEFT corner (fixed position)
+        // Difficulty
         GameDifficulty diff = GameManager.getInstance().getDifficulty();
         String diffName = diff.name();
         String diffDisplay = diffName.equals("EASY") ? "Mudah" : diffName.equals("NORMAL") ? "Normal" : "Sulit";
         String diffText = "Kesulitan: " + diffDisplay;
         font.setColor(new Color(0.9f, 0.9f, 0.95f, 1f));
         float diffMargin = 12f;
-        float diffX = diffMargin; // LEFT edge with margin
-        float diffY = diffMargin + font.getCapHeight(); // BOTTOM edge with safe margin
+        float diffX = diffMargin;
+        float diffY = diffMargin + font.getCapHeight();
         font.draw(batch, diffText, diffX, diffY);
         
-        // Draw testing mode indicator (bottom-right corner) - ALWAYS VISIBLE
+        // Testing mode
         if (GameManager.getInstance().isTestingMode()) {
             font.setColor(Color.YELLOW);
             String testingText = "[MODE UJI AKTIF] Tekan T untuk ganti";
@@ -207,12 +180,10 @@ public class MainMenuScreen implements Screen {
         
         batch.end();
 
-        // Handle button clicks
         if (Gdx.input.justTouched()) {
             handleClicks(mouseX, mouseY);
         }
         
-        // Handle keyboard shortcuts
         handleKeyboard();
     }
     
@@ -225,7 +196,6 @@ public class MainMenuScreen implements Screen {
     }
     
     private void handleInput() {
-        // Toggle testing mode with T key
         if (Gdx.input.isKeyJustPressed(Input.Keys.T)) {
             GameManager.getInstance().setTestingMode(!GameManager.getInstance().isTestingMode());
         }
@@ -234,28 +204,24 @@ public class MainMenuScreen implements Screen {
     private void handleClicks(float mouseX, float mouseY) {
         if (!isActive) return;
         
-        // New Game
         if (newGameBtn.isClicked(mouseX, mouseY)) {
             isActive = false;
             startNewGame();
             return;
         }
         
-        // Resume
         if (resumeBtn != null && resumeBtn.isClicked(mouseX, mouseY)) {
             isActive = false;
             resumeGame();
             return;
         }
         
-        // Settings
         if (settingsBtn.isClicked(mouseX, mouseY)) {
             isActive = false;
             game.setScreen(new SettingsScreen(game));
             return;
         }
         
-        // Quit
         if (quitBtn.isClicked(mouseX, mouseY)) {
             Gdx.app.exit();
         }
@@ -266,7 +232,6 @@ public class MainMenuScreen implements Screen {
             Gdx.app.exit();
         }
         
-        // Enter to start new game
         if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
             if (!isActive) return;
             isActive = false;
@@ -275,20 +240,17 @@ public class MainMenuScreen implements Screen {
     }
     
     private void startNewGame() {
-        // NEW GAME - creates fresh session
         GameManager.getInstance().startNewGame(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
         GameManager.getInstance().setCurrentState(GameManager.GameState.STORY);
 
         Screen playScreen = new PlayScreen(game);
 
-        // If testing mode, skip cutscenes
         if (GameManager.getInstance().isTestingMode()) {
             GameManager.getInstance().setCurrentState(GameManager.GameState.PLAYING);
             GameManager.getInstance().setHasMetJosh(true);
             game.setScreen(playScreen);
             System.out.println("[MainMenu] NEW GAME - TESTING MODE: skipping cutscenes");
         } else {
-            // Chain cutscenes: 0_1 -> 0_2 -> ... -> 0_9 -> game
             Screen cutscene9 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_9", playScreen);
             Screen cutscene8 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_8", cutscene9);
             Screen cutscene7 = CutsceneManager.getInstance().createCutsceneScreen(game, "0_7", cutscene8);

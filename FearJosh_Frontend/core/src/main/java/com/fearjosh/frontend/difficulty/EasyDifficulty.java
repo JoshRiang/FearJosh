@@ -1,12 +1,5 @@
 package com.fearjosh.frontend.difficulty;
 
-/**
- * Easy difficulty - lebih mudah untuk pemain baru.
- * - Stamina drain lebih lambat
- * - Battery drain lebih lambat
- * - Vision radius lebih lebar
- * - Fog lebih tipis
- */
 public class EasyDifficulty implements DifficultyStrategy {
     @Override
     public float walkSpeedMultiplier() {
@@ -15,7 +8,7 @@ public class EasyDifficulty implements DifficultyStrategy {
 
     @Override
     public float runSpeedMultiplier() {
-        return 1.4f;  // Sprint gives 40% speed boost - CUSTOM: ubah angka ini (1.0-2.0)
+        return 1.4f;
     }
 
     @Override

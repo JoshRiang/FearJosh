@@ -3,33 +3,18 @@ package com.fearjosh.frontend.systems;
 import com.fearjosh.frontend.render.TiledMapManager;
 import java.util.*;
 
-/**
- * A* Pathfinding System for enemy navigation in Physical Mode
- * Uses grid-based pathfinding with TMX collision detection
- * Room parameter removed; uses TiledMapManager for obstacle checking
- */
+// A* Pathfinding
 public class PathfindingSystem {
     
-    private static final int GRID_SIZE = 16; // Size of each pathfinding cell
-    private static final int MAX_PATH_LENGTH = 100; // Prevent infinite loops
+    private static final int GRID_SIZE = 16;
+    private static final int MAX_PATH_LENGTH = 100;
     
-    /**
-     * Find path from start to goal using A* algorithm
-     * @param startX Starting X coordinate
-     * @param startY Starting Y coordinate
-     * @param goalX Goal X coordinate
-     * @param goalY Goal Y coordinate
-     * @param tiledMapManager TiledMapManager for TMX collision checking
-     * @param worldWidth World width
-     * @param worldHeight World height
-     * @return List of waypoints (x,y pairs) or empty list if no path found
-     */
     public static List<float[]> findPath(float startX, float startY, 
                                          float goalX, float goalY,
                                          TiledMapManager tiledMapManager,
                                          float worldWidth, float worldHeight) {
         
-        // Convert to grid coordinates
+        // Grid coords
         int startGridX = (int)(startX / GRID_SIZE);
         int startGridY = (int)(startY / GRID_SIZE);
         int goalGridX = (int)(goalX / GRID_SIZE);
@@ -38,7 +23,7 @@ public class PathfindingSystem {
         int gridWidth = (int)(worldWidth / GRID_SIZE) + 1;
         int gridHeight = (int)(worldHeight / GRID_SIZE) + 1;
         
-        // A* algorithm
+        // A* init
         PriorityQueue<Node> openSet = new PriorityQueue<>(Comparator.comparingDouble(n -> n.fScore));
         Set<String> closedSet = new HashSet<>();
         Map<String, Node> allNodes = new HashMap<>();
@@ -63,19 +48,16 @@ public class PathfindingSystem {
             
             closedSet.add(current.getKey());
             
-            // Check all neighbors (8-directional for smooth diagonal movement)
-            // Format: {dx, dy, cost}
-            // Orthogonal (N/S/E/W) = cost 1.0
-            // Diagonal (NE/SE/SW/NW) = cost 1.41 (sqrt(2))
+            // 8-directional
             double[][] directions = {
-                {0, 1, 1.0},   // North
-                {1, 0, 1.0},   // East
-                {0, -1, 1.0},  // South
-                {-1, 0, 1.0},  // West
-                {1, 1, 1.41},  // NE
-                {1, -1, 1.41}, // SE
-                {-1, -1, 1.41},// SW
-                {-1, 1, 1.41}  // NW
+                {0, 1, 1.0},
+                {1, 0, 1.0},
+                {0, -1, 1.0},
+                {-1, 0, 1.0},
+                {1, 1, 1.41},
+                {1, -1, 1.41},
+                {-1, -1, 1.41},
+                {-1, 1, 1.41}
             };
             
             for (double[] dir : directions) {
@@ -83,7 +65,7 @@ public class PathfindingSystem {
                 int neighborY = current.y + (int)dir[1];
                 double moveCost = dir[2];
                 
-                // Out of bounds
+                // Bounds check
                 if (neighborX < 0 || neighborX >= gridWidth || 
                     neighborY < 0 || neighborY >= gridHeight) {
                     continue;
@@ -91,28 +73,26 @@ public class PathfindingSystem {
                 
                 String neighborKey = neighborX + "," + neighborY;
                 
-                // Already evaluated
+                // Skip evaluated
                 if (closedSet.contains(neighborKey)) {
                     continue;
                 }
                 
-                // Check if walkable (not blocked by TMX collision)
+                // Collision check
                 if (isBlocked(neighborX, neighborY, tiledMapManager)) {
                     continue;
                 }
                 
-                // For diagonal moves, check if path is not blocked by corner obstacles
-                if (moveCost > 1.0) { // Diagonal movement
+                // Corner check
+                if (moveCost > 1.0) {
                     int dx = (int)dir[0];
                     int dy = (int)dir[1];
-                    // Check if adjacent orthogonal cells are blocked (prevent cutting corners)
                     if (isBlocked(current.x + dx, current.y, tiledMapManager) || 
                         isBlocked(current.x, current.y + dy, tiledMapManager)) {
-                        continue; // Can't cut through corner
+                        continue;
                     }
                 }
                 
-                // Calculate tentative gScore with proper diagonal cost
                 double tentativeGScore = current.gScore + moveCost;
                 
                 Node neighbor = allNodes.get(neighborKey);
@@ -121,7 +101,7 @@ public class PathfindingSystem {
                     allNodes.put(neighborKey, neighbor);
                 }
                 
-                // Found better path to neighbor
+                // Better path
                 if (tentativeGScore < neighbor.gScore) {
                     neighbor.parent = current;
                     neighbor.gScore = tentativeGScore;
@@ -134,100 +114,79 @@ public class PathfindingSystem {
             }
         }
         
-        // No path found
+        // No path
         return new ArrayList<>();
     }
     
-    /**
-     * Check if grid cell is blocked using TMX collision
-     * Uses TiledMapManager.isWalkable() for proper collision detection
-     */
     private static boolean isBlocked(int gridX, int gridY, TiledMapManager tiledMapManager) {
         if (tiledMapManager == null || !tiledMapManager.hasCurrentMap()) {
-            return false; // No collision data, assume walkable
+            return false;
         }
         
-        // Convert grid to world coordinates (center of cell)
         float worldX = gridX * GRID_SIZE + GRID_SIZE / 2f;
         float worldY = gridY * GRID_SIZE + GRID_SIZE / 2f;
         
-        // Check if walkable via TMX
         return !tiledMapManager.isWalkable(worldX, worldY);
     }
     
-    /**
-     * Check rectangle overlap
-     */
-    @SuppressWarnings("unused") // Utility method for future collision detection
+    @SuppressWarnings("unused")
     private static boolean overlaps(float x1, float y1, float w1, float h1,
                                     float x2, float y2, float w2, float h2) {
         return x1 < x2 + w2 && x1 + w1 > x2 &&
                y1 < y2 + h2 && y1 + h1 > y2;
     }
     
-    /**
-     * Manhattan distance heuristic
-     */
+    // Heuristic
     private static double heuristic(int x1, int y1, int x2, int y2) {
         return Math.abs(x1 - x2) + Math.abs(y1 - y2);
     }
     
-    /**
-     * Reconstruct path from goal node back to start
-     */
     private static List<float[]> reconstructPath(Node goalNode) {
         List<float[]> path = new ArrayList<>();
         Node current = goalNode;
         
         while (current != null) {
-            // Convert grid to world coordinates (center of cell)
             float worldX = current.x * GRID_SIZE + GRID_SIZE / 2f;
             float worldY = current.y * GRID_SIZE + GRID_SIZE / 2f;
-            path.add(0, new float[]{worldX, worldY}); // Add to front
+            path.add(0, new float[]{worldX, worldY});
             current = current.parent;
         }
         
         return path;
     }
     
-    /**
-     * Simplify path by removing unnecessary waypoints (straight lines)
-     */
     public static List<float[]> simplifyPath(List<float[]> path) {
         if (path.size() <= 2) return path;
         
         List<float[]> simplified = new ArrayList<>();
-        simplified.add(path.get(0)); // Start
+        simplified.add(path.get(0));
         
         for (int i = 1; i < path.size() - 1; i++) {
             float[] prev = path.get(i - 1);
             float[] curr = path.get(i);
             float[] next = path.get(i + 1);
             
-            // Check if curr is on straight line between prev and next
             float dx1 = curr[0] - prev[0];
             float dy1 = curr[1] - prev[1];
             float dx2 = next[0] - curr[0];
             float dy2 = next[1] - curr[1];
             
-            // Not colinear - keep this point
+            // Not colinear
             if (Math.abs(dx1 * dy2 - dy1 * dx2) > 0.01f) {
                 simplified.add(curr);
             }
         }
         
-        simplified.add(path.get(path.size() - 1)); // Goal
+        simplified.add(path.get(path.size() - 1));
         return simplified;
     }
     
-    /**
-     * Node class for A* algorithm
-     */
+    // Node class
     private static class Node {
         int x, y;
         Node parent;
-        double gScore = Double.POSITIVE_INFINITY; // Cost from start
-        double fScore = Double.POSITIVE_INFINITY; // Estimated total cost
+        double gScore = Double.POSITIVE_INFINITY;
+        double fScore = Double.POSITIVE_INFINITY;
         
         Node(int x, int y) {
             this.x = x;

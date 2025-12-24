@@ -3,10 +3,6 @@ package com.fearjosh.frontend.state.enemy;
 import com.fearjosh.frontend.entity.Enemy;
 import com.fearjosh.frontend.entity.Player;
 
-/**
- * Searching state - enemy wanders randomly looking for player.
- * Room parameter removed; movement uses TMX collision via Enemy's TiledMapManager.
- */
 public class EnemySearchingState implements EnemyState {
 
     private static final float WANDER_SPEED = 40f;

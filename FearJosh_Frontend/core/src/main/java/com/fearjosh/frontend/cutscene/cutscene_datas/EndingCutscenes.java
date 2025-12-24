@@ -5,23 +5,14 @@ import com.fearjosh.frontend.cutscene.CutsceneData;
 import com.fearjosh.frontend.cutscene.CutsceneLayer;
 import com.fearjosh.frontend.cutscene.CutsceneManager;
 
-/**
- * Ending cutscene data.
- * Plays when player successfully escapes from the school.
- */
 public class EndingCutscenes {
 
-    /**
-     * Register all ending cutscenes to CutsceneManager.
-     */
     public static void registerCutscenes(CutsceneManager manager) {
-        // GOOD ENDING - Player escapes
         CutsceneData goodEnding = new CutsceneData.Builder("ending_good")
                 .withFadeIn(1.0f)
-                .withMusic("Audio/Music/victory_music.wav")
-                .addLayer(new CutsceneLayer.Builder("Cutscene/ending.png")
+                .addLayer(new CutsceneLayer.Builder("Cutscene/1/1_3.png")
                         .zoom(CutsceneAnimationType.ZOOM_OUT, 0.1f)
-                        .scale(0.5f)
+                        .scale(1.0f)
                         .duration(20.0f)
                         .build())
                 .addDialog("Narrator", 
@@ -45,13 +36,11 @@ public class EndingCutscenes {
 
         manager.registerCutscene("ending_good", goodEnding);
 
-        // BAD ENDING - Game Over (alternative ending variant)
         CutsceneData badEnding = new CutsceneData.Builder("ending_bad")
                 .withFadeIn(1.0f)
-                .withMusic("Audio/Music/game_over_music.wav")
-                .addLayer(new CutsceneLayer.Builder("Sprite/Player/jonatan_injured.png")
+                .addLayer(new CutsceneLayer.Builder("Cutscene/1/1_g2.png")
                         .zoom(CutsceneAnimationType.ZOOM_IN, 0.15f)
-                        .scale(0.5f)
+                        .scale(1.0f)
                         .duration(15.0f)
                         .build())
                 .addDialog("Narrator", 
@@ -67,6 +56,19 @@ public class EndingCutscenes {
 
         manager.registerCutscene("ending_bad", badEnding);
 
-        System.out.println("[EndingCutscenes] Registered ending cutscenes");
+        CutsceneData gameOverEnding = new CutsceneData.Builder("game_over_cutscene")
+                .withFadeIn(0.5f)
+                .addLayer(new CutsceneLayer.Builder("Cutscene/1/1_g1.png")
+                        .scale(1.0f)
+                        .duration(5.0f)
+                        .build())
+                .addDialog("", "Josh menangkapmu...")
+                .addDialog("", "GAME OVER")
+                .withFadeOut(1.5f)
+                .build();
+
+        manager.registerCutscene("game_over_cutscene", gameOverEnding);
+
+        System.out.println("[EndingCutscenes] Registered ending cutscenes (good, bad, game_over)");
     }
 }

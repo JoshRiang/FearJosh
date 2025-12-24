@@ -38,7 +38,6 @@ public class GameScore {
     @Column(name = "completed_at", updatable = false)
     private LocalDateTime completedAt;
 
-    // Constructor without id and timestamp (for creating new records)
     public GameScore(String playerId, String username, String difficulty, 
                      Long completionTimeSeconds, String completionTimeFormatted) {
         this.playerId = playerId;
