@@ -22,9 +22,6 @@ public class GameScoreService {
     @Autowired
     private GameScoreRepository gameScoreRepository;
 
-    /**
-     * Submit a new game score (when player escapes successfully)
-     */
     public GameScoreResponse submitScore(GameScoreRequest request) {
         // Check if player already has a score
         if (gameScoreRepository.existsByPlayerId(request.getPlayerId())) {
@@ -68,9 +65,6 @@ public class GameScoreService {
         return convertToResponse(savedScore);
     }
 
-    /**
-     * Get leaderboard by difficulty
-     */
     public LeaderboardResponse getLeaderboardByDifficulty(String difficulty, int limit) {
         Pageable pageable = PageRequest.of(0, limit);
         List<GameScore> scores = gameScoreRepository.findByDifficultyOrderByCompletionTimeSecondsAsc(difficulty, pageable);
@@ -88,9 +82,6 @@ public class GameScoreService {
         return new LeaderboardResponse(difficulty, (int) totalPlayers, leaderboard);
     }
 
-    /**
-     * Get global leaderboard (all difficulties)
-     */
     public LeaderboardResponse getGlobalLeaderboard(int limit) {
         Pageable pageable = PageRequest.of(0, limit);
         List<GameScore> scores = gameScoreRepository.findAllByOrderByCompletionTimeSecondsAsc(pageable);
@@ -108,9 +99,6 @@ public class GameScoreService {
         return new LeaderboardResponse("ALL", (int) totalPlayers, leaderboard);
     }
 
-    /**
-     * Get player's rank and score
-     */
     public PlayerRankResponse getPlayerRank(String playerId) {
         GameScore score = gameScoreRepository.findByPlayerId(playerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Player not found with ID: " + playerId));
@@ -129,9 +117,6 @@ public class GameScoreService {
         );
     }
 
-    /**
-     * Get player's global rank
-     */
     public PlayerRankResponse getPlayerGlobalRank(String playerId) {
         GameScore score = gameScoreRepository.findByPlayerId(playerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Player not found with ID: " + playerId));
@@ -150,18 +135,12 @@ public class GameScoreService {
         );
     }
 
-    /**
-     * Get score by player ID
-     */
     public GameScoreResponse getScoreByPlayerId(String playerId) {
         GameScore score = gameScoreRepository.findByPlayerId(playerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Player not found with ID: " + playerId));
         return convertToResponse(score);
     }
 
-    /**
-     * Search players by username
-     */
     public List<GameScoreResponse> searchByUsername(String username) {
         List<GameScore> scores = gameScoreRepository.findByUsernameContainingIgnoreCase(username);
         return scores.stream()
@@ -169,9 +148,6 @@ public class GameScoreService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Get all scores (for admin purposes)
-     */
     public List<GameScoreResponse> getAllScores() {
         return gameScoreRepository.findAllByOrderByCompletionTimeSecondsAsc()
                 .stream()
@@ -179,25 +155,16 @@ public class GameScoreService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Delete a score by player ID
-     */
     public void deleteScore(String playerId) {
         GameScore score = gameScoreRepository.findByPlayerId(playerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Player not found with ID: " + playerId));
         gameScoreRepository.delete(score);
     }
 
-    /**
-     * Check if player exists
-     */
     public boolean playerExists(String playerId) {
         return gameScoreRepository.existsByPlayerId(playerId);
     }
 
-    /**
-     * Format time in seconds to readable format (MM:SS or HH:MM:SS)
-     */
     private String formatTime(Long totalSeconds) {
         long hours = totalSeconds / 3600;
         long minutes = (totalSeconds % 3600) / 60;
@@ -210,9 +177,6 @@ public class GameScoreService {
         }
     }
 
-    /**
-     * Convert GameScore entity to response DTO
-     */
     private GameScoreResponse convertToResponse(GameScore score) {
         return new GameScoreResponse(
                 score.getId(),

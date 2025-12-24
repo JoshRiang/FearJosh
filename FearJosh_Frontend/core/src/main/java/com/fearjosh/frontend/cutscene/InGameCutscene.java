@@ -16,64 +16,49 @@ import com.fearjosh.frontend.systems.AudioManager;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * In-game cutscene system for events that happen within the game world.
- * Unlike storyboard cutscenes, these keep the player in the world but lock controls.
- * 
- * Used for:
- * - First Josh encounter in the gym
- * - Special story moments
- */
-@SuppressWarnings("unused") // Some fields reserved for future cutscene features (Josh appearance animation, phases)
+@SuppressWarnings("unused")
 public class InGameCutscene {
 
     public enum CutsceneType {
-        GYM_ENCOUNTER,      // First meeting with Josh
-        OBJECTIVE_CHANGE,   // After waking up - objective changes
-        ESCAPE_SUCCESS,     // Player escapes successfully
-        CUSTOM              // Custom cutscene
+        GYM_ENCOUNTER,
+        OBJECTIVE_CHANGE,
+        ESCAPE_SUCCESS,
+        CUSTOM
     }
 
-    // Cutscene state
     private boolean isActive;
     private CutsceneType currentType;
     private int currentPhase;
     private float phaseTimer;
     private boolean isComplete;
 
-    // Dialog system
     private List<DialogLine> dialogLines;
     private int currentDialogIndex;
     private String currentDisplayText;
     private float textRevealTimer;
-    private static final float TEXT_REVEAL_SPEED = 0.03f; // Seconds per character
+    private static final float TEXT_REVEAL_SPEED = 0.03f;
     private boolean textFullyRevealed;
 
-    // Visual effects
     private float fadeAlpha;
     private float shakeAmount;
     private float shakeTimer;
     
-    // Josh appearance animation for GYM_ENCOUNTER
     private float joshX, joshY;
     private float joshTargetX, joshTargetY;
     private float joshAlpha;
     private boolean joshVisible;
     private float joshAnimTimer;
-    private static final float JOSH_SPRITE_SIZE = 150f; // Fixed render size (not raw file size)
-    private static final float JOSH_FACE_SIZE = 200f; // Josh face during scary reveal
+    private static final float JOSH_SPRITE_SIZE = 150f;
+    private static final float JOSH_FACE_SIZE = 200f;
 
-    // Textures (lazy loaded)
     private Texture injuredTexture;
     private Texture joshFaceTexture;
-    private Texture joshSpriteTexture; // Josh sprite sheet for animation
+    private Texture joshSpriteTexture;
     
-    // Josh sprite sheet animation (4 frames)
     private Animation<TextureRegion> joshAnimation;
     private static final int JOSH_SPRITE_FRAMES = 4;
     private static final float JOSH_ANIM_FRAME_DURATION = 0.15f;
 
-    // Callbacks
     private Runnable onComplete;
 
     public InGameCutscene() {
@@ -91,9 +76,6 @@ public class InGameCutscene {
         joshVisible = false;
     }
 
-    /**
-     * Start a predefined cutscene
-     */
     public void startCutscene(CutsceneType type, Runnable onComplete) {
         this.currentType = type;
         this.onComplete = onComplete;
@@ -109,7 +91,6 @@ public class InGameCutscene {
         dialogLines.clear();
         setupCutscene(type);
 
-        // Set game state to CUTSCENE
         GameManager.getInstance().setCurrentState(GameManager.GameState.CUTSCENE);
 
         System.out.println("[InGameCutscene] Started: " + type);
@@ -134,17 +115,13 @@ public class InGameCutscene {
     private void setupGymEncounter() {
         System.out.println("[InGameCutscene] Setting up GYM_ENCOUNTER cutscene...");
         
-        // Load textures safely
         try {
             
             
-            // Load Josh chasing sprite sheet for cutscene animation (appears from top)
-            // This is a 4-frame sprite sheet
             if (joshSpriteTexture == null) {
                 if (Gdx.files.internal("Sprite/Enemy/josh_chasing_down.png").exists()) {
                     joshSpriteTexture = new Texture("Sprite/Enemy/josh_chasing_down.png");
                     
-                    // Split the sprite sheet into 4 frames
                     int frameWidth = joshSpriteTexture.getWidth() / JOSH_SPRITE_FRAMES;
                     int frameHeight = joshSpriteTexture.getHeight();
                     TextureRegion[][] frames = TextureRegion.split(joshSpriteTexture, frameWidth, frameHeight);
@@ -154,13 +131,11 @@ public class InGameCutscene {
                     System.out.println("[InGameCutscene] Loaded josh_chasing_down.png as 4-frame sprite sheet");
                 } else if (Gdx.files.internal("josh.png").exists()) {
                     joshSpriteTexture = new Texture("josh.png");
-                    // Fallback - no animation
                     joshAnimation = null;
                     System.out.println("[InGameCutscene] Loaded josh.png fallback for cutscene (no animation)");
                 }
             }
             
-            // Load Josh face for jumpscare
             if (joshFaceTexture == null) {
                 if (Gdx.files.internal("joshInvertedFace.png").exists()) {
                     joshFaceTexture = new Texture("joshInvertedFace.png");
@@ -172,22 +147,19 @@ public class InGameCutscene {
             e.printStackTrace();
         }
         
-        // Initialize Josh animation state - start from top of screen
         joshVisible = false;
         joshAlpha = 0f;
         joshAnimTimer = 0f;
-        joshY = 600f; // Start above screen (will animate down)
-        joshTargetY = 200f; // Target position (center-ish)
+        joshY = 600f;
+        joshTargetY = 200f;
 
-        // Dialog sequence with Josh appearance
         dialogLines.add(new DialogLine(null, "*Suara langkah kaki menggema di gym...*", 2.5f));
         dialogLines.add(new DialogLine(null, "*Kamu merasakan hawa dingin yang aneh...*", 2.0f));
-        dialogLines.add(new DialogLine(null, "GRRRRAAAAAHHH!!!", 1.5f, true)); // Screen shake + Josh appears from top
+        dialogLines.add(new DialogLine(null, "GRRRRAAAAAHHH!!!", 1.5f, true));
         dialogLines.add(new DialogLine("Josh", "...", 1.0f));
         dialogLines.add(new DialogLine(null, "*Josh menerkammu dengan kecepatan luar biasa!*", 2.0f));
-        dialogLines.add(new DialogLine(null, "*Kamu pingsan...*", 3.0f, true, true)); // Fade to black
+        dialogLines.add(new DialogLine(null, "*Kamu pingsan...*", 3.0f, true, true));
 
-        // Play scary sound - safely
         try {
             String soundPath = "Audio/Effect/monster_roar_sound_effect.wav";
             if (Gdx.files.internal(soundPath).exists()) {
@@ -218,35 +190,27 @@ public class InGameCutscene {
         dialogLines.add(new DialogLine(null, "Kamu berhasil kabur dari sekolah.", 3.0f));
     }
 
-    /**
-     * Update cutscene state
-     */
     public void update(float delta) {
         if (!isActive || isComplete)
             return;
 
         phaseTimer += delta;
         
-        // Update Josh animation for GYM_ENCOUNTER
         if (currentType == CutsceneType.GYM_ENCOUNTER) {
             joshAnimTimer += delta;
             
-            // Josh appears during dialog index 2 (the roar) and stays visible
             if (currentDialogIndex >= 2) {
                 joshVisible = true;
-                // Fade in Josh
                 if (joshAlpha < 1f) {
-                    joshAlpha += delta * 2f; // Fade in over 0.5 seconds
+                    joshAlpha += delta * 2f;
                     if (joshAlpha > 1f) joshAlpha = 1f;
                 }
             }
         }
 
-        // Handle dialog progression
         if (currentDialogIndex < dialogLines.size()) {
             DialogLine currentLine = dialogLines.get(currentDialogIndex);
             
-            // Text reveal animation
             if (!textFullyRevealed) {
                 textRevealTimer += delta;
                 int charsToShow = (int) (textRevealTimer / TEXT_REVEAL_SPEED);
@@ -258,7 +222,6 @@ public class InGameCutscene {
                 }
             }
 
-            // Screen shake effect
             if (currentLine.screenShake && phaseTimer < 0.5f) {
                 shakeAmount = 5f * (1f - phaseTimer * 2f);
                 shakeTimer += delta * 30f;
@@ -266,12 +229,10 @@ public class InGameCutscene {
                 shakeAmount = 0f;
             }
 
-            // Fade effect
             if (currentLine.fadeToBlack) {
                 fadeAlpha = Math.min(1f, phaseTimer / 2f);
             }
 
-            // Auto-advance or input to continue
             boolean shouldAdvance = false;
             if (currentLine.duration > 0 && phaseTimer >= currentLine.duration && textFullyRevealed) {
                 shouldAdvance = true;
@@ -286,7 +247,6 @@ public class InGameCutscene {
                 nextDialog();
             }
         } else {
-            // Cutscene complete
             completeCutscene();
         }
     }
@@ -312,19 +272,14 @@ public class InGameCutscene {
 
         System.out.println("[InGameCutscene] Complete: " + currentType);
         
-        // Store onComplete before clearing currentType
         Runnable completionCallback = onComplete;
         CutsceneType completedType = currentType;
 
-        // Call the completion callback first
         if (completionCallback != null) {
             completionCallback.run();
         }
         
-        // After callback, if no new cutscene was started, restore game state
-        // (if callback started a new cutscene, isActive will be true again)
         if (!isActive) {
-            // Restore state to PLAYING or STORY based on game progress
             GameManager gm = GameManager.getInstance();
             if (gm.getCurrentState() == GameManager.GameState.CUTSCENE) {
                 if (gm.hasMetJosh()) {
@@ -338,21 +293,14 @@ public class InGameCutscene {
         }
     }
 
-    /**
-     * Render cutscene overlay
-     */
     public void render(ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font,
             float screenWidth, float screenHeight) {
         if (!isActive)
             return;
 
-        // Calculate shake offset
         float shakeX = shakeAmount > 0 ? (float) Math.sin(shakeTimer) * shakeAmount : 0f;
         float shakeY = shakeAmount > 0 ? (float) Math.cos(shakeTimer * 1.3f) * shakeAmount : 0f;
 
-        // Apply shake (translate camera or UI)
-        
-        // Draw fade overlay
         if (fadeAlpha > 0) {
             shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
             shapeRenderer.setColor(0f, 0f, 0f, fadeAlpha);
@@ -360,43 +308,34 @@ public class InGameCutscene {
             shapeRenderer.end();
         }
 
-        // Draw dialog box if we have current dialog
         if (currentDialogIndex < dialogLines.size() && fadeAlpha < 0.9f) {
             DialogLine currentLine = dialogLines.get(currentDialogIndex);
             
-            // === DRAW JOSH SPRITE DURING GYM_ENCOUNTER ===
-            // Josh appears suddenly from TOP of screen and moves down
             if (currentType == CutsceneType.GYM_ENCOUNTER && joshVisible && joshSpriteTexture != null) {
                 batch.begin();
                 batch.setColor(1f, 1f, 1f, joshAlpha);
                 
-                // Draw Josh face during the roar (dialog index 2) - JUMPSCARE!
                 if (currentDialogIndex == 2 && joshFaceTexture != null) {
                     float faceX = (screenWidth - JOSH_FACE_SIZE) / 2f + shakeX * 2f;
                     float faceY = screenHeight * 0.4f + shakeY * 2f;
                     batch.draw(joshFaceTexture, faceX, faceY, JOSH_FACE_SIZE, JOSH_FACE_SIZE);
                 }
-                // Draw Josh sprite entering from TOP (dialog index 2+)
                 else if (currentDialogIndex >= 2) {
-                    // Animate Josh moving down from top of screen
-                    // joshY starts at 600 (above screen) and moves to joshTargetY (200)
-                    float animSpeed = 800f; // pixels per second
+                    float animSpeed = 800f;
                     if (joshY > joshTargetY) {
                         joshY -= animSpeed * Gdx.graphics.getDeltaTime();
                         if (joshY < joshTargetY) joshY = joshTargetY;
                     }
                     
-                    // Scale up as Josh gets closer
                     float distanceProgress = 1f - (joshY - joshTargetY) / 400f;
-                    float scale = 1f + distanceProgress * 0.8f; // Scale from 1x to 1.8x
-                    scale = Math.max(1f, Math.min(scale, 2f)); // Clamp between 1x and 2x
+                    float scale = 1f + distanceProgress * 0.8f;
+                    scale = Math.max(1f, Math.min(scale, 2f));
                     
                     float spriteW = JOSH_SPRITE_SIZE * scale;
                     float spriteH = JOSH_SPRITE_SIZE * scale;
                     float spriteX = (screenWidth - spriteW) / 2f + shakeX;
                     float spriteY = joshY + shakeY;
                     
-                    // Use animated sprite if available, otherwise fallback to static texture
                     if (joshAnimation != null) {
                         TextureRegion frame = joshAnimation.getKeyFrame(joshAnimTimer);
                         batch.draw(frame, spriteX, spriteY, spriteW, spriteH);
@@ -409,20 +348,17 @@ public class InGameCutscene {
                 batch.end();
             }
             
-            // Dialog box at bottom
             float boxHeight = 120f;
             float boxY = 30f + shakeY;
             float boxPadding = 30f;
             float boxX = boxPadding + shakeX;
             float boxWidth = screenWidth - boxPadding * 2;
 
-            // Box background
             shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
             shapeRenderer.setColor(0.05f, 0.05f, 0.08f, 0.9f);
             shapeRenderer.rect(boxX, boxY, boxWidth, boxHeight);
             shapeRenderer.end();
 
-            // Box border (red horror theme)
             shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
             Gdx.gl.glLineWidth(2f);
             shapeRenderer.setColor(0.7f, 0.1f, 0.1f, 1f);
@@ -430,10 +366,8 @@ public class InGameCutscene {
             shapeRenderer.end();
             Gdx.gl.glLineWidth(1f);
 
-            // Draw text
             batch.begin();
             
-            // Speaker name (if any)
             float textY = boxY + boxHeight - 25f;
             if (currentLine.speaker != null && !currentLine.speaker.isEmpty()) {
                 font.setColor(0.9f, 0.3f, 0.3f, 1f);
@@ -441,11 +375,9 @@ public class InGameCutscene {
                 textY -= 30f;
             }
 
-            // Dialog text
             font.setColor(Color.WHITE);
             font.draw(batch, currentDisplayText, boxX + 20f, textY);
 
-            // Continue hint
             if (textFullyRevealed) {
                 font.setColor(0.5f, 0.5f, 0.5f, 0.7f);
                 String hint = "[Tekan SPACE untuk lanjut]";
@@ -456,7 +388,6 @@ public class InGameCutscene {
             batch.end();
         }
 
-        // Draw injured texture during specific phases
         if (currentType == CutsceneType.GYM_ENCOUNTER && injuredTexture != null && 
             currentDialogIndex >= 4 && fadeAlpha > 0.3f) {
             batch.begin();
@@ -472,9 +403,6 @@ public class InGameCutscene {
         }
     }
 
-    /**
-     * Get screen shake offset for camera
-     */
     public float getShakeX() {
         return shakeAmount > 0 ? (float) Math.sin(shakeTimer) * shakeAmount : 0f;
     }
@@ -491,9 +419,6 @@ public class InGameCutscene {
         return isComplete;
     }
 
-    /**
-     * Force skip cutscene (for testing)
-     */
     public void skip() {
         completeCutscene();
     }
@@ -513,9 +438,6 @@ public class InGameCutscene {
         }
     }
 
-    /**
-     * Dialog line data class
-     */
     private static class DialogLine {
         String speaker;
         String text;

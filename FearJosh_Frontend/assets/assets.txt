@@ -1,4 +1,8 @@
 Audio/Cutscene/0/0_2.wav
+Audio/Cutscene/1/door_opening.mp3
+Audio/Cutscene/1/man_breathing_fast.m4a
+Audio/Cutscene/1/rain_sound.mp3
+Audio/Cutscene/1/running_on_wet_surface.mp3
 Audio/Effect/cricket_sound_effect.wav
 Audio/Effect/cut_rope_sound_effect.wav
 Audio/Effect/flashlight_click_sound_effect.wav
@@ -27,6 +31,8 @@ Cutscene/0/0_9.jpg
 Cutscene/1/1_1.png
 Cutscene/1/1_2.png
 Cutscene/1/1_3.png
+Cutscene/1/1_g1.png
+Cutscene/1/1_g2.png
 General/vignette.png
 General/white.png
 Items/battery.png

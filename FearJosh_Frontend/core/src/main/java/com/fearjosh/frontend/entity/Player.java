@@ -17,17 +17,14 @@ public class Player {
     private float x;
     private float y;
 
-    // RENDER SIZE - Visual only (untuk draw sprite)
+    // RENDER SIZE
     private float renderWidth;
     private float renderHeight;
 
     private Direction direction;
 
-    // DUAL HITBOX SYSTEM
-    // 1) BODY HITBOX - untuk collision dengan ENEMY (full body)
+    // HITBOX
     private Rectangle bodyBounds;
-
-    // 2) FOOT HITBOX - untuk collision dengan FURNITURE (hanya kaki)
     private Rectangle footBounds;
 
     // Animations
@@ -35,27 +32,26 @@ public class Player {
     private TextureRegion idleUp, idleDown, idleLeft, idleRight;
     private float animationTimer = 0;
 
-    // ------------ PLAYER STATE SYSTEM ------------
+    // STATE
     private PlayerState currentState;
-    private boolean sprintIntent = false; // Intent dari input
-    private boolean moving = false; // Track apakah player bergerak
+    private boolean sprintIntent = false;
+    private boolean moving = false;
 
-    // ------------ STAMINA SYSTEM ------------
+    // STAMINA
     private float stamina = 100f;
     private static final float MAX_STAMINA = 100f;
 
-    // ------------ FLASHLIGHT ------------
+    // FLASHLIGHT
     private boolean flashlightOn = false;
 
-    // ------------ INJURED SPRITE ------------
-    // Used when player is hurt (caught by Josh) and needs bandaging
+    // INJURED
     private Texture injuredTexture;
     private boolean isInjured = false;
 
     public Player(float x, float y, float width, float height) {
         this.x = x;
         this.y = y;
-        // Use Constants for proper sizing (width/height params ignored)
+        // sizing
         this.renderWidth = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_WIDTH;
         this.renderHeight = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_HEIGHT;
         this.direction = Direction.DOWN;
@@ -65,9 +61,7 @@ public class Player {
         updateHitboxes();
     }
 
-    /**
-     * Update player state dan animasi setiap frame
-     */
+    // UPDATE
     public void update(float delta, boolean isMoving) {
         this.moving = isMoving;
 
@@ -78,14 +72,14 @@ public class Player {
             animationTimer = 0f;
         }
 
-        // Update state (handles stamina drain/regen)
+        // state update
         PlayerState nextState = currentState.update(this, delta);
         if (nextState != currentState) {
             setState(nextState);
         }
     }
 
-    // ------------ STATE MANAGEMENT ------------
+    // STATE
 
     public void setState(PlayerState newState) {
         if (currentState != null) {
@@ -101,14 +95,11 @@ public class Player {
         return currentState;
     }
 
-    /**
-     * Get speed multiplier dari current state
-     */
     public float getSpeedMultiplier() {
         return currentState != null ? currentState.getSpeedMultiplier() : 1.0f;
     }
 
-    // ------------ SPRINT INTENT ------------
+    // SPRINT
 
     public void setSprintIntent(boolean intent) {
         this.sprintIntent = intent;
@@ -118,7 +109,7 @@ public class Player {
         return sprintIntent;
     }
 
-    // ------------ STAMINA ------------
+    // STAMINA
 
     public float getStamina() {
         return stamina;
@@ -132,11 +123,10 @@ public class Player {
         return MAX_STAMINA;
     }
 
-    // ------------ FLASHLIGHT ------------
+    // FLASHLIGHT
 
     public void toggleFlashlight() {
         flashlightOn = !flashlightOn;
-        // Play flashlight click sound
         AudioManager.getInstance().playSound("Audio/Effect/flashlight_click_sound_effect.wav");
     }
 
@@ -148,7 +138,7 @@ public class Player {
         this.flashlightOn = on;
     }
 
-    // ------------ MOVEMENT STATE ------------
+    // MOVEMENT
 
     public boolean isMoving() {
         return moving;
@@ -158,19 +148,14 @@ public class Player {
         this.moving = moving;
     }
 
-    // Gerak + update arah hadap
     public void move(float dx, float dy) {
-        // Only update direction if there's actual movement
         if (Math.abs(dx) > 0.0001f || Math.abs(dy) > 0.0001f) {
-            // Prioritize the larger movement to avoid flickering
             if (Math.abs(dx) > Math.abs(dy)) {
-                // Horizontal movement is dominant
                 if (dx > 0)
                     direction = Direction.RIGHT;
                 else
                     direction = Direction.LEFT;
             } else {
-                // Vertical movement is dominant
                 if (dy > 0)
                     direction = Direction.UP;
                 else
@@ -183,7 +168,7 @@ public class Player {
         updateHitboxes();
     }
 
-    // ------------ posisi ------------
+    // POSITION
 
     public float getCenterX() {
         return x + renderWidth / 2f;
@@ -215,83 +200,58 @@ public class Player {
         return y;
     }
 
-    /** @return Render width for drawing sprite */
     public float getRenderWidth() {
         return renderWidth;
     }
 
-    /** @return Render height for drawing sprite */
     public float getRenderHeight() {
         return renderHeight;
     }
 
-    /** @deprecated Use getRenderWidth() - kept for compatibility */
     @Deprecated
     public float getWidth() {
-        return renderWidth; // Return render width instead
+        return renderWidth;
     }
 
-    /** @deprecated Use getRenderHeight() - kept for compatibility */
     @Deprecated
     public float getHeight() {
-        return renderHeight; // Return render height instead
+        return renderHeight;
     }
 
-    // ------------ DUAL HITBOX SYSTEM ------------
+    // HITBOX
 
-    /**
-     * Update posisi SEMUA hitbox setiap kali player bergerak
-     * Uses Constants for consistent, tunable hitbox sizing
-     */
     private void updateHitboxes() {
-        // 1) BODY HITBOX - full sprite untuk enemy collision
         float bodyW = com.fearjosh.frontend.config.Constants.PLAYER_ENEMY_HITBOX_WIDTH;
         float bodyH = com.fearjosh.frontend.config.Constants.PLAYER_ENEMY_HITBOX_HEIGHT;
         bodyBounds.set(x, y, bodyW, bodyH);
 
-        // 2) FOOT HITBOX - bagian bawah untuk furniture collision
         float footW = com.fearjosh.frontend.config.Constants.PLAYER_COLLISION_WIDTH;
         float footH = com.fearjosh.frontend.config.Constants.PLAYER_COLLISION_HEIGHT;
         float footOffsetY = com.fearjosh.frontend.config.Constants.PLAYER_COLLISION_OFFSET_Y;
-        float footX = x + (renderWidth - footW) / 2f; // Center horizontally
-        float footY = y + footOffsetY; // Bottom of sprite + offset
+        float footX = x + (renderWidth - footW) / 2f;
+        float footY = y + footOffsetY;
 
         footBounds.set(footX, footY, footW, footH);
     }
 
-    /**
-     * BODY BOUNDS - untuk collision dengan ENEMY
-     * Full-body rectangle dari kepala sampai kaki
-     */
     public Rectangle getBodyBounds() {
         return bodyBounds;
     }
 
-    /**
-     * FOOT BOUNDS - untuk collision dengan FURNITURE
-     * Hanya bagian kaki/bawah sprite
-     */
     public Rectangle getFootBounds() {
         return footBounds;
     }
 
-    /**
-     * DEBUG: Render hitbox untuk visual debugging
-     * Call dari PlayScreen dengan ShapeRenderer
-     */
+    // DEBUG
     public void debugRenderHitboxes(com.badlogic.gdx.graphics.glutils.ShapeRenderer sr) {
-        // Body hitbox - MERAH (untuk enemy)
         sr.setColor(com.badlogic.gdx.graphics.Color.RED);
         sr.rect(bodyBounds.x, bodyBounds.y, bodyBounds.width, bodyBounds.height);
 
-        // Foot hitbox - HIJAU (untuk furniture)
         sr.setColor(com.badlogic.gdx.graphics.Color.GREEN);
         sr.rect(footBounds.x, footBounds.y, footBounds.width, footBounds.height);
     }
 
-    // ------------ INJURED STATE ------------
-    // Player enters injured state when caught by Josh
-    // Must complete bandage minigame to recover
+    // INJURED
 
     public void setInjured(boolean injured) {
         this.isInjured = injured;
@@ -301,7 +261,7 @@ public class Player {
         return isInjured;
     }
 
-    // ------------ animasi ------------
+    // ANIMATION
 
     public void loadAnimations() {
         int frameCols = 4; // jumlah frame per arah
@@ -311,10 +271,7 @@ public class Player {
         Texture upTex = new Texture("Sprite/Player/jonatan_up.png");
         Texture downTex = new Texture("Sprite/Player/jonatan_down.png");
 
-        // Load injured sprite (used when player is caught by Josh)
         injuredTexture = new Texture("Sprite/Player/jonatan_injured.png");
-
-        // Hitung frameWidth dan frameHeight untuk setiap texture
         int frameWidthRight = rightTex.getWidth() / frameCols;
         int frameHeightRight = rightTex.getHeight();
 
@@ -342,7 +299,6 @@ public class Player {
         walkUp.setPlayMode(Animation.PlayMode.LOOP);
         walkDown.setPlayMode(Animation.PlayMode.LOOP);
 
-        // idle = frame ke-0 tiap arah
         idleRight = rightSplit[0][0];
         idleLeft = leftSplit[0][0];
         idleUp = upSplit[0][0];
@@ -350,7 +306,6 @@ public class Player {
     }
 
     public TextureRegion getCurrentFrame(boolean isMoving) {
-        // If injured (caught by Josh), show injured sprite
         if (isInjured && injuredTexture != null) {
             return new TextureRegion(injuredTexture);
         }

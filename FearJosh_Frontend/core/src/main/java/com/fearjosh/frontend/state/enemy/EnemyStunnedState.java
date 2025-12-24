@@ -3,10 +3,6 @@ package com.fearjosh.frontend.state.enemy;
 import com.fearjosh.frontend.entity.Enemy;
 import com.fearjosh.frontend.entity.Player;
 
-/**
- * Stunned state - enemy is temporarily incapacitated.
- * Room parameter removed; not used since stunned enemy doesn't move.
- */
 public class EnemyStunnedState implements EnemyState {
 
     private float timer;
@@ -27,10 +23,8 @@ public class EnemyStunnedState implements EnemyState {
     public void update(Enemy enemy, Player player, float delta) {
         timer -= delta;
         if (timer <= 0f) {
-            // balik ke chasing (karena sudah dalam sight radius saat di-stun)
             enemy.changeState(enemy.getChasingState());
         }
-        // musuh diam selama stun (tidak move)
     }
 
     public void reset(float newDuration) {

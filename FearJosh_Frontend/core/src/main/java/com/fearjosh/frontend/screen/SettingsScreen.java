@@ -29,27 +29,14 @@ import com.fearjosh.frontend.difficulty.GameDifficulty;
 import com.fearjosh.frontend.systems.AudioManager;
 import com.fearjosh.frontend.ui.MenuButton;
 
-/**
- * Settings screen with PNG-based difficulty buttons (Easy, Normal, Hard, Back).
- * Uses MenuButton class for consistent styling with MainMenuScreen.
- * 
- * CUSTOMIZE BUTTON SIZES:
- * - SETTINGS_BUTTON_WIDTH / SETTINGS_BUTTON_HEIGHT for difficulty buttons
- * - Adjust startY and spacing in createButtons() for positioning
- */
 public class SettingsScreen implements Screen {
 
     private static final float VIRTUAL_WIDTH = 800f;
     private static final float VIRTUAL_HEIGHT = 600f;
     
-    // ==================== BUTTON SIZE CUSTOMIZATION ====================
-    /** Width of settings buttons (Easy, Normal, Hard, Back) */
     private static final float SETTINGS_BUTTON_WIDTH = 200f;
-    /** Height of settings buttons */
     private static final float SETTINGS_BUTTON_HEIGHT = 56f;
-    /** Vertical spacing between buttons */
     private static final float SETTINGS_BUTTON_SPACING = 16f;
-    // ===================================================================
 
     private final FearJosh game;
     private SpriteBatch batch;
@@ -60,18 +47,15 @@ public class SettingsScreen implements Screen {
     private GlyphLayout glyphLayout;
     private Texture backgroundTex;
     
-    // PNG-based buttons
     private MenuButton easyBtn;
     private MenuButton normalBtn;
     private MenuButton hardBtn;
     private MenuButton backBtn;
     
-    // Selection highlight texture
     private Texture selectionHighlightTex;
     
     private boolean isActive = true;
     
-    // For confirmation dialog (Scene2D Stage)
     private Stage dialogStage;
     private Skin dialogSkin;
     private boolean showingDialog = false;
@@ -93,32 +77,21 @@ public class SettingsScreen implements Screen {
         font.getData().setScale(1.5f);
         glyphLayout = new GlyphLayout();
         
-        // Try to load background (same as main menu or dedicated settings bg)
         try {
             backgroundTex = new Texture("UI/main_menu_background.png");
         } catch (Exception e) {
             backgroundTex = null;
         }
         
-        // Create selection highlight (semi-transparent box)
         selectionHighlightTex = createSelectionHighlight();
-        
-        // Create PNG-based buttons
         createButtons();
-        
-        // Setup dialog stage for confirmation popups
         setupDialogStage();
     }
     
-    /**
-     * Create PNG-based buttons for difficulty selection and back.
-     * Modify positioning here to adjust layout.
-     */
     private void createButtons() {
         float centerX = VIRTUAL_WIDTH / 2f;
         float startY = VIRTUAL_HEIGHT * 0.55f;
         
-        // Easy button
         easyBtn = new MenuButton(
             "menu/settings_easy.png",
             null,
@@ -126,7 +99,6 @@ public class SettingsScreen implements Screen {
             SETTINGS_BUTTON_WIDTH, SETTINGS_BUTTON_HEIGHT
         );
         
-        // Normal button
         normalBtn = new MenuButton(
             "menu/settings_normal.png",
             null,
@@ -134,7 +106,6 @@ public class SettingsScreen implements Screen {
             SETTINGS_BUTTON_WIDTH, SETTINGS_BUTTON_HEIGHT
         );
         
-        // Hard button
         hardBtn = new MenuButton(
             "menu/settings_hard.png",
             null,
@@ -142,7 +113,6 @@ public class SettingsScreen implements Screen {
             SETTINGS_BUTTON_WIDTH, SETTINGS_BUTTON_HEIGHT
         );
         
-        // Back button (at bottom with extra spacing)
         backBtn = new MenuButton(
             "menu/settings_back.png",
             null,
@@ -155,9 +125,8 @@ public class SettingsScreen implements Screen {
         int w = (int) SETTINGS_BUTTON_WIDTH + 20;
         int h = (int) SETTINGS_BUTTON_HEIGHT + 10;
         Pixmap pm = new Pixmap(w, h, Pixmap.Format.RGBA8888);
-        pm.setColor(new Color(0.2f, 0.6f, 1f, 0.3f)); // Blue highlight
+        pm.setColor(new Color(0.2f, 0.6f, 1f, 0.3f));
         pm.fill();
-        // Draw border
         pm.setColor(new Color(0.3f, 0.7f, 1f, 0.8f));
         pm.drawRectangle(0, 0, w, h);
         pm.drawRectangle(1, 1, w - 2, h - 2);
@@ -175,7 +144,6 @@ public class SettingsScreen implements Screen {
         ls.font = dialogSkin.get("default-font", BitmapFont.class);
         dialogSkin.add("default", ls);
         
-        // Create button textures for dialog
         dialogCardTex = createRoundedTexture(480, 280, 16, new Color(0.15f, 0.15f, 0.18f, 0.98f));
         dialogBtnUpTex = createRoundedTexture(140, 44, 22, new Color(1f, 1f, 1f, 0.1f));
         dialogBtnOverTex = createRoundedTexture(140, 44, 22, new Color(1f, 1f, 1f, 0.2f));
@@ -222,7 +190,6 @@ public class SettingsScreen implements Screen {
         uiCamera.update();
         batch.setProjectionMatrix(uiCamera.combined);
         
-        // Handle dialog if showing
         if (showingDialog) {
             Gdx.input.setInputProcessor(dialogStage);
             dialogStage.act(delta);
@@ -230,39 +197,32 @@ public class SettingsScreen implements Screen {
             return;
         }
         
-        // Normal settings screen
         Gdx.input.setInputProcessor(null);
         
         float mouseX = getMouseX();
         float mouseY = getMouseY();
         
-        // Update button hover states
         easyBtn.update(mouseX, mouseY);
         normalBtn.update(mouseX, mouseY);
         hardBtn.update(mouseX, mouseY);
         backBtn.update(mouseX, mouseY);
         
-        // Render
         batch.begin();
         
-        // Background
         if (backgroundTex != null) {
             batch.draw(backgroundTex, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
         }
         
-        // Title
         font.setColor(Color.WHITE);
         font.getData().setScale(2f);
         glyphLayout.setText(font, "PENGATURAN");
         font.draw(batch, "PENGATURAN", (VIRTUAL_WIDTH - glyphLayout.width) / 2f, VIRTUAL_HEIGHT - 60f);
         
-        // Difficulty label
         font.getData().setScale(1.2f);
         font.setColor(new Color(0.8f, 0.8f, 0.85f, 1f));
         glyphLayout.setText(font, "Pilih Kesulitan:");
         font.draw(batch, "Pilih Kesulitan:", (VIRTUAL_WIDTH - glyphLayout.width) / 2f, VIRTUAL_HEIGHT * 0.68f);
         
-        // Draw selection highlight behind current difficulty button
         GameDifficulty current = GameManager.getInstance().getDifficulty();
         MenuButton selectedBtn = getButtonForDifficulty(current);
         if (selectedBtn != null && selectionHighlightTex != null) {
@@ -271,13 +231,11 @@ public class SettingsScreen implements Screen {
             batch.draw(selectionHighlightTex, hx, hy);
         }
         
-        // Draw buttons
         easyBtn.render(batch);
         normalBtn.render(batch);
         hardBtn.render(batch);
         backBtn.render(batch);
         
-        // Current difficulty indicator - BOTTOM-LEFT corner
         font.getData().setScale(1f);
         font.setColor(new Color(0.5f, 0.8f, 0.5f, 1f));
         String currentText = "Current: " + current.name().substring(0, 1).toUpperCase() 
@@ -289,12 +247,10 @@ public class SettingsScreen implements Screen {
         
         batch.end();
         
-        // Handle clicks
         if (Gdx.input.justTouched() && isActive) {
             handleClicks(mouseX, mouseY);
         }
         
-        // Handle keyboard
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             game.setScreen(new MainMenuScreen(game));
         }
@@ -318,25 +274,21 @@ public class SettingsScreen implements Screen {
     }
     
     private void handleClicks(float mouseX, float mouseY) {
-        // Easy
         if (easyBtn.isClicked(mouseX, mouseY)) {
             attemptChangeDifficulty(GameDifficulty.EASY);
             return;
         }
         
-        // Normal
         if (normalBtn.isClicked(mouseX, mouseY)) {
             attemptChangeDifficulty(GameDifficulty.MEDIUM);
             return;
         }
         
-        // Hard
         if (hardBtn.isClicked(mouseX, mouseY)) {
             attemptChangeDifficulty(GameDifficulty.HARD);
             return;
         }
         
-        // Back
         if (backBtn.isClicked(mouseX, mouseY)) {
             game.setScreen(new MainMenuScreen(game));
         }
@@ -345,18 +297,14 @@ public class SettingsScreen implements Screen {
     private void attemptChangeDifficulty(GameDifficulty newDiff) {
         GameManager gm = GameManager.getInstance();
         
-        // If same difficulty, do nothing
         if (gm.getDifficulty() == newDiff) {
             return;
         }
         
-        // Check if there's an active run
         if (gm.difficultyChangeRequiresNewGame()) {
-            // Show confirmation dialog
             pendingDifficulty = newDiff;
             showConfirmationDialog();
         } else {
-            // No active run - change freely
             gm.setDifficulty(newDiff);
             System.out.println("[Settings] Difficulty changed to " + newDiff);
         }

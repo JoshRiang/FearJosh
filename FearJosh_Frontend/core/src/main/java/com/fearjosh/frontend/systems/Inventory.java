@@ -4,27 +4,18 @@ import com.fearjosh.frontend.entity.Item;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Inventory system managing 7 item slots (Minecraft-style).
- * Handles adding, removing, using items.
- */
 public class Inventory {
 
     public static final int MAX_SLOTS = 7;
 
     private Item[] slots;
-    private int selectedSlot; // Currently selected slot (0-6)
+    private int selectedSlot;
 
     public Inventory() {
         slots = new Item[MAX_SLOTS];
         selectedSlot = 0;
     }
 
-    /**
-     * Add item to first empty slot
-     * 
-     * @return true if added successfully, false if inventory full
-     */
     public boolean addItem(Item item) {
         for (int i = 0; i < MAX_SLOTS; i++) {
             if (slots[i] == null) {
@@ -34,14 +25,9 @@ public class Inventory {
             }
         }
         System.out.println("[Inventory] Full! Cannot add " + item.getName());
-        return false; // Inventory full
+        return false;
     }
 
-    /**
-     * Add item to specific slot
-     * 
-     * @return true if added, false if slot occupied
-     */
     public boolean addItemToSlot(Item item, int slotIndex) {
         if (slotIndex < 0 || slotIndex >= MAX_SLOTS) {
             return false;
@@ -53,12 +39,9 @@ public class Inventory {
             return true;
         }
 
-        return false; // Slot occupied
+        return false;
     }
 
-    /**
-     * Remove item from specific slot
-     */
     public void removeItem(int slotIndex) {
         if (slotIndex >= 0 && slotIndex < MAX_SLOTS && slots[slotIndex] != null) {
             Item item = slots[slotIndex];
@@ -68,20 +51,10 @@ public class Inventory {
         }
     }
 
-    /**
-     * Use item in currently selected slot
-     * 
-     * @return true if item was used, false otherwise
-     */
     public boolean useSelectedItem() {
         return useItem(selectedSlot);
     }
 
-    /**
-     * Use item in specific slot
-     * 
-     * @return true if item was used successfully
-     */
     public boolean useItem(int slotIndex) {
         if (slotIndex < 0 || slotIndex >= MAX_SLOTS) {
             return false;
@@ -98,20 +71,14 @@ public class Inventory {
             return false;
         }
 
-        // Use the item
         boolean success = item.useItem();
         if (success) {
-            // If item is consumed, remove it
-            // (Subclasses can decide if they're consumed or not)
             System.out.println("[Inventory] Used " + item.getName());
         }
 
         return success;
     }
 
-    /**
-     * Get item in specific slot
-     */
     public Item getItem(int slotIndex) {
         if (slotIndex >= 0 && slotIndex < MAX_SLOTS) {
             return slots[slotIndex];
@@ -119,32 +86,20 @@ public class Inventory {
         return null;
     }
 
-    /**
-     * Get currently selected item
-     */
     public Item getSelectedItem() {
         return slots[selectedSlot];
     }
 
-    /**
-     * Select slot by index (0-6)
-     */
     public void setSelectedSlot(int slotIndex) {
         if (slotIndex >= 0 && slotIndex < MAX_SLOTS) {
             this.selectedSlot = slotIndex;
         }
     }
 
-    /**
-     * Get currently selected slot index
-     */
     public int getSelectedSlot() {
         return selectedSlot;
     }
 
-    /**
-     * Check if inventory is full
-     */
     public boolean isFull() {
         for (int i = 0; i < MAX_SLOTS; i++) {
             if (slots[i] == null) {
@@ -154,9 +109,6 @@ public class Inventory {
         return true;
     }
 
-    /**
-     * Check if inventory is empty
-     */
     public boolean isEmpty() {
         for (int i = 0; i < MAX_SLOTS; i++) {
             if (slots[i] != null) {
@@ -166,16 +118,10 @@ public class Inventory {
         return true;
     }
 
-    /**
-     * Get all items (including nulls)
-     */
     public Item[] getAllSlots() {
         return slots;
     }
 
-    /**
-     * Get list of non-null items
-     */
     public List<Item> getItems() {
         List<Item> items = new ArrayList<>();
         for (Item item : slots) {
@@ -186,9 +132,6 @@ public class Inventory {
         return items;
     }
 
-    /**
-     * Clear all items
-     */
     public void clear() {
         for (int i = 0; i < MAX_SLOTS; i++) {
             if (slots[i] != null) {
@@ -199,9 +142,6 @@ public class Inventory {
         selectedSlot = 0;
     }
 
-    /**
-     * Dispose resources
-     */
     public void dispose() {
         for (Item item : slots) {
             if (item != null) {

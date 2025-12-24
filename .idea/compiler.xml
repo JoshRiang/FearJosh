@@ -1,17 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="CompilerConfiguration">
-    <annotationProcessing>
-      <profile name="Maven default annotation processors profile" enabled="true">
-        <sourceOutputDir name="target/generated-sources/annotations" />
-        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
-        <outputRelativeToContentRoot value="true" />
-        <module name="fearjosh-backend" />
-      </profile>
-    </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="fearjosh-backend" target="17" />
+    </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="FearJosh_Frontend.core.main" options="-Xlint:-unchecked -Xlint:-deprecation" />
+      <module name="FearJosh_Frontend.lwjgl3.main" options="-Xlint:-unchecked -Xlint:-deprecation" />
       <module name="fearjosh-backend" options="-parameters" />
     </option>
   </component>

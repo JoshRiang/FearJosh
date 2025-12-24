@@ -3,44 +3,26 @@ package com.fearjosh.frontend.core;
 import com.fearjosh.frontend.difficulty.GameDifficulty;
 import com.fearjosh.frontend.world.RoomId;
 
-/**
- * Represents an active game session/run with all progress data.
- * This is kept in memory during gameplay and can be saved/loaded.
- * 
- * TERMINOLOGY:
- * - "Session" = one playthrough from New Game until death/completion
- * - "Active Run" = session currently in progress (can be resumed)
- * - "No Run" = no active session (Resume should be disabled)
- */
 public class GameSession {
-    
-    // Session metadata
-    private final long sessionId;           // Unique ID for this run
-    private final long startTimeMs;         // When session was created
-    private boolean active;                 // Is this run still active?
-    
-    // Game progress
-    private RoomId currentRoomId;           // Which room player is in
-    private float playerX;                  // Player X position
-    private float playerY;                  // Player Y position
-    
-    // Player state
-    private float stamina;                  // Current stamina value
-    private float battery;                  // Current flashlight battery
-    private int batterySegments;            // Number of battery pickups collected
-    private boolean flashlightOn;           // Is flashlight currently on?
-    
-    // Difficulty (locked once session starts)
+
+    // META
+    private final long sessionId;
+    private final long startTimeMs;
+    private boolean active;
+
+    // PROGRESS
+    private RoomId currentRoomId;
+    private float playerX;
+    private float playerY;
+
+    // PLAYER STATE
+    private float stamina;
+    private float battery;
+    private int batterySegments;
+    private boolean flashlightOn;
+
     private final GameDifficulty difficulty;
-    
-    // Additional progress (expandable)
-    // private int itemsCollected;
-    // private Set<String> unlockedRooms;
-    // private float playTimeSeconds;
-    
-    /**
-     * Create a new game session
-     */
+
     public GameSession(GameDifficulty difficulty, RoomId startingRoom, float playerX, float playerY) {
         this.sessionId = System.currentTimeMillis();
         this.startTimeMs = System.currentTimeMillis();
@@ -50,16 +32,14 @@ public class GameSession {
         this.currentRoomId = startingRoom;
         this.playerX = playerX;
         this.playerY = playerY;
-        
-        // Default starting values
+
+        // DEFAULTS
         this.stamina = 100f;
         this.battery = 1f;
         this.batterySegments = 0;
         this.flashlightOn = false;
     }
-    
-    // ==================== GETTERS & SETTERS ====================
-    
+
     public long getSessionId() {
         return sessionId;
     }
@@ -75,10 +55,7 @@ public class GameSession {
     public void setActive(boolean active) {
         this.active = active;
     }
-    
-    /**
-     * End this session (called when player quits to menu without saving)
-     */
+
     public void endSession() {
         this.active = false;
         System.out.println("[GameSession] Session " + sessionId + " ended");
@@ -143,12 +120,8 @@ public class GameSession {
     public GameDifficulty getDifficulty() {
         return difficulty;
     }
-    
-    // ==================== HELPER METHODS ====================
-    
-    /**
-     * Update session with current player state
-     */
+
+    // UPDATE
     public void updateFromPlayer(com.fearjosh.frontend.entity.Player player, RoomId roomId) {
         this.playerX = player.getX();
         this.playerY = player.getY();
@@ -156,10 +129,7 @@ public class GameSession {
         this.flashlightOn = player.isFlashlightOn();
         this.currentRoomId = roomId;
     }
-    
-    /**
-     * Restore player state from session
-     */
+
     public void restoreToPlayer(com.fearjosh.frontend.entity.Player player) {
         player.setX(this.playerX);
         player.setY(this.playerY);

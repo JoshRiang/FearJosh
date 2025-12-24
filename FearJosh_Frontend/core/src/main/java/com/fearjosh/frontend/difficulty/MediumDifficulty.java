@@ -1,9 +1,5 @@
 package com.fearjosh.frontend.difficulty;
 
-/**
- * Medium difficulty - balanced untuk kebanyakan pemain.
- * Semua multiplier di nilai default (1.0).
- */
 public class MediumDifficulty implements DifficultyStrategy {
     @Override
     public float walkSpeedMultiplier() {
@@ -12,7 +8,7 @@ public class MediumDifficulty implements DifficultyStrategy {
 
     @Override
     public float runSpeedMultiplier() {
-        return 1.4f;  // Sprint gives 40% speed boost - CUSTOM: ubah angka ini (1.0-2.0)
+        return 1.4f;
     }
 
     @Override
