@@ -16,8 +16,8 @@ import java.util.List;
  */
 public class LeaderboardService {
     
-    // Backend URL - ganti jika deploy ke server
-    private static final String BASE_URL = "http://localhost:8080/api";
+    // Backend URL - Render.com deployment
+    private static final String BASE_URL = "https://fearjosh.onrender.com/api";
     
     private static LeaderboardService instance;
     private final Json json;
