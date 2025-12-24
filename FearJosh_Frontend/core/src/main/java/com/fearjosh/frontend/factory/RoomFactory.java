@@ -65,24 +65,25 @@ public class RoomFactory {
             baseChance = 1f;
         boolean spawnBattery = MathUtils.randomBoolean(baseChance);
         if (spawnBattery) {
-            boolean onTable = MathUtils.randomBoolean();
-            if (onTable && !tables.isEmpty()) {
-                // Baterai di atas meja
+            float bw = 12f;
+            float bh = 20f;
+            
+            // For rooms that might use TMX maps (most rooms), spawn battery directly
+            // as a visible interactable instead of hiding in procedural lockers
+            // This ensures battery is accessible regardless of room type
+            
+            // Try to spawn on table first if available
+            if (!tables.isEmpty() && MathUtils.randomBoolean(0.5f)) {
                 Table t = tables.get(MathUtils.random(0, tables.size() - 1));
-                float bw = 12f;
-                float bh = 20f;
                 float bx = t.getCenterX() - bw / 2f;
                 float by = t.getY() + t.getHeight() + 4f;
                 interactables.add(new Battery(bx, by, bw, bh));
-            } else if (!lockers.isEmpty()) {
-                // Baterai di dalam loker
-                Locker locker = lockers.get(MathUtils.random(0, lockers.size() - 1));
-                float bw = 12f;
-                float bh = 20f;
-                float bx = locker.getCenterX() - bw / 2f;
-                float by = locker.getY() + bh;
-                Battery batteryInside = new Battery(bx, by, bw, bh);
-                locker.setContainedBattery(batteryInside);
+            } else {
+                // Spawn at random walkable position in room
+                float margin = WALL_MARGIN + 50f;
+                float bx = MathUtils.random(margin, worldWidth - margin - bw);
+                float by = MathUtils.random(margin, worldHeight - margin - bh);
+                interactables.add(new Battery(bx, by, bw, bh));
             }
         }
 

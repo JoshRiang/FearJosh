@@ -2,7 +2,6 @@ package com.fearjosh.frontend.state.enemy;
 
 import com.fearjosh.frontend.entity.Enemy;
 import com.fearjosh.frontend.entity.Player;
-import com.fearjosh.frontend.world.Room;
 
 public class EnemySearchingState implements EnemyState {
 
@@ -22,7 +21,7 @@ public class EnemySearchingState implements EnemyState {
     }
 
     @Override
-    public void update(Enemy enemy, Player player, Room currentRoom, float delta) {
+    public void update(Enemy enemy, Player player, float delta) {
         wanderTimer += delta;
         if (wanderTimer >= WANDER_CHANGE_TIME) {
             wanderTimer = 0f;
@@ -31,7 +30,7 @@ public class EnemySearchingState implements EnemyState {
 
         float moveX = wanderDx * WANDER_SPEED * delta;
         float moveY = wanderDy * WANDER_SPEED * delta;
-        enemy.move(moveX, moveY, currentRoom);
+        enemy.move(moveX, moveY);
 
         float dx = player.getCenterX() - enemy.getCenterX();
         float dy = player.getCenterY() - enemy.getCenterY();

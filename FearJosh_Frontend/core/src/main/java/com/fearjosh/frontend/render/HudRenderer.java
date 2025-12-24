@@ -2,11 +2,13 @@ package com.fearjosh.frontend.render;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
 import com.fearjosh.frontend.core.GameManager;
 import com.fearjosh.frontend.difficulty.GameDifficulty;
+import com.fearjosh.frontend.world.RoomId;
 
 public class HudRenderer {
 
@@ -29,7 +31,7 @@ public class HudRenderer {
         float startY = virtualHeight - margin - barHeight;
         float totalWidth = 4 * segmentWidth + 3 * gap;
 
-        // Battery segments
+        // Battery
         float batteryFrac = battery / batteryMax;
         if (batteryFrac < 0f)
             batteryFrac = 0f;
@@ -52,7 +54,7 @@ public class HudRenderer {
             renderer.rect(x, startY, segmentWidth, barHeight);
         }
 
-        // Stamina bar
+        // Stamina
         float staminaMaxWidth = totalWidth;
         float staminaX = margin;
         float staminaY = startY - barHeight - 6f;
@@ -70,17 +72,16 @@ public class HudRenderer {
         renderer.setColor(Color.CYAN);
         renderer.rect(staminaX, staminaY, staminaWidth, barHeight);
 
-        // Pause button (top-right corner)
+        // Pause button
         float btnSize = 28f;
         float btnX = virtualWidth - margin - btnSize;
         float btnY = virtualHeight - margin - btnSize;
         pauseButtonBounds.set(btnX, btnY, btnSize, btnSize);
 
-        // Button background
         renderer.setColor(0.15f, 0.15f, 0.18f, 1f);
         renderer.rect(btnX, btnY, btnSize, btnSize);
 
-        // Pause icon: two vertical bars
+        // Pause icon
         float barW = 6f;
         float barH = btnSize - 10f;
         float barY = btnY + 5f;
@@ -100,22 +101,36 @@ public class HudRenderer {
             float virtualWidth,
             float virtualHeight) {
         GameManager gm = GameManager.getInstance();
-        
-        // Display current room name (center-top)
-        String roomName = gm.getCurrentRoomId().getDisplayName();
         Color old = font.getColor();
-        font.setColor(new Color(1f, 1f, 1f, 0.9f));
-        // Calculate center position
-        com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout(font, roomName);
-        float roomNameX = (virtualWidth - layout.width) / 2f;
-        font.draw(batch, roomName, roomNameX, virtualHeight - 8f);
-        
-        // Display difficulty (top-right)
-        GameDifficulty diff = gm.getDifficulty();
-        String text = "Difficulty: " + diff.name().substring(0, 1).toUpperCase()
-                + diff.name().substring(1).toLowerCase();
         font.setColor(new Color(0.85f, 0.85f, 0.9f, 1f));
-        font.draw(batch, text, virtualWidth - 160f, virtualHeight - 28f);
+        
+        // Room name
+        RoomId currentRoom = gm.getCurrentRoomId();
+        if (currentRoom != null) {
+            String roomText = currentRoom.getDisplayName();
+            GlyphLayout roomLayout = new GlyphLayout(font, roomText);
+            float roomX = virtualWidth - roomLayout.width - 10f;
+            float roomY = virtualHeight - 45f;
+            font.draw(batch, roomText, roomX, roomY);
+        }
+        
+        font.setColor(old);
+    }
+    
+    // Difficulty text
+    public void renderDifficultyText(SpriteBatch batch, BitmapFont font) {
+        GameDifficulty diff = GameManager.getInstance().getDifficulty();
+        String diffName = diff.name();
+        String diffDisplay = diffName.equals("EASY") ? "Mudah" : diffName.equals("NORMAL") ? "Normal" : "Sulit";
+        String text = "Kesulitan: " + diffDisplay;
+        
+        float margin = 12f;
+        float x = margin;
+        float y = margin + font.getCapHeight();
+        
+        Color old = font.getColor();
+        font.setColor(new Color(0.85f, 0.85f, 0.9f, 1f));
+        font.draw(batch, text, x, y);
         font.setColor(old);
     }
 }

@@ -9,33 +9,32 @@ import com.fearjosh.frontend.difficulty.HardDifficulty;
 import com.fearjosh.frontend.world.RoomId;
 import com.fearjosh.frontend.systems.Inventory;
 
-/**
- * Singleton GameManager to hold persistent game state
- * (player instance, current room, difficulty, and game state).
- */
 public class GameManager {
 
-    /**
-     * GAME STATE SYSTEM
-     * Mengontrol input, update, dan render berdasarkan state aktif
-     */
+    // STATE
     public enum GameState {
-        MAIN_MENU, // Di main menu, hanya tombol menu aktif
-        CUTSCENE, // Cutscene playing, input terbatas (skip only)
-        PLAYING, // In-game, world update + player bisa gerak
-        PAUSED, // Game paused, overlay pause + tombol pause aktif
-        GAME_OVER // Game over screen, no input allowed
+        MAIN_MENU,
+        CUTSCENE,
+        STORY,
+        PLAYING,
+        PAUSED,
+        GAME_OVER,
+        ENDING
     }
+
+    // STORY
+    private boolean hasMetJosh = false;
+    private boolean storyObjectiveIsEscape = false;
 
     private static GameManager INSTANCE;
 
-    // SESSION MANAGEMENT - NEW SYSTEM
-    private GameSession currentSession; // Active game session (null = no run)
+    // SESSION
+    private GameSession currentSession;
 
-    // ROOM DIRECTOR - Enemy stalking system
-    private RoomDirector roomDirector; // Controls enemy abstract/physical presence
+    // ROOM
+    private RoomDirector roomDirector;
+    private JoshSpawnController joshSpawnController;
 
-    // Legacy fields (kept for backward compatibility during transition)
     private Player player;
     private RoomId currentRoomId;
 
@@ -44,17 +43,14 @@ public class GameManager {
     private GameDifficulty difficulty = GameDifficulty.MEDIUM;
     private DifficultyStrategy difficultyStrategy = new MediumDifficulty();
 
-    // TESTING MODE - untuk testing gameplay tanpa enemy mengganggu
     private boolean testingMode = false;
-
-    // GAME STATE - kontrol input/update/render per state
     private GameState currentState = GameState.MAIN_MENU;
 
-    // HEALTH/LIVES SYSTEM - based on difficulty
-    private int maxLives = 2; // Default medium
+    // LIVES
+    private int maxLives = 2;
     private int currentLives = 2;
 
-    // INVENTORY SYSTEM - 7 slots (Minecraft-style)
+    // INVENTORY
     private Inventory inventory;
 
     private GameManager() {
@@ -72,7 +68,7 @@ public class GameManager {
         this.virtualWidth = virtualWidth;
         this.virtualHeight = virtualHeight;
         if (player == null) {
-            // Use Constants for consistent sizing
+            // sizing
             float pw = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_WIDTH;
             float ph = com.fearjosh.frontend.config.Constants.PLAYER_RENDER_HEIGHT;
             player = new Player(virtualWidth / 2f - pw / 2f,
@@ -81,16 +77,13 @@ public class GameManager {
             player.loadAnimations();
         }
         if (currentRoomId == null) {
-            currentRoomId = RoomId.getStartingRoom(); // Use method from RoomId
+            currentRoomId = RoomId.LOBBY; // Start in LOBBY
         }
 
-        // Initialize lives based on difficulty
         initializeLives();
     }
 
-    /**
-     * Initialize lives based on current difficulty
-     */
+    // INIT
     private void initializeLives() {
         switch (difficulty) {
             case EASY:
@@ -106,79 +99,67 @@ public class GameManager {
         currentLives = maxLives;
     }
 
-    /**
-     * Check if there's an active game session that can be resumed
-     * 
-     * @return true if currentSession exists and is active
-     */
     public boolean hasActiveSession() {
         return currentSession != null && currentSession.isActive();
     }
 
-    /**
-     * Get current active session (may be null)
-     */
     public GameSession getCurrentSession() {
         return currentSession;
     }
 
-    /**
-     * Start a NEW GAME - creates fresh session and resets all progress
-     * This should be called when user clicks "New Game"
-     */
     public void startNewGame(float virtualWidth, float virtualHeight) {
         this.virtualWidth = virtualWidth;
         this.virtualHeight = virtualHeight;
 
-        // Reset player
+        // RESET
+        this.hasMetJosh = false;
+        this.storyObjectiveIsEscape = false;
+        resetInventory();
+        com.fearjosh.frontend.systems.KeyManager.getInstance().reset();
         this.player = null;
         this.currentRoomId = null;
         initIfNeeded(virtualWidth, virtualHeight);
+        initializeLives();
 
-        // Create new session with current difficulty
-        RoomId startRoom = RoomId.getStartingRoom(); // Starting room (LOBBY)
+        RoomId startRoom = RoomId.LOBBY;
         currentSession = new GameSession(
                 difficulty,
                 startRoom,
                 player.getX(),
                 player.getY());
 
-        // Initialize RoomDirector for new game (also in testing mode)
         initializeRoomDirector(startRoom);
 
         System.out.println("[GameManager] NEW GAME started: " + currentSession);
+        System.out.println("[GameManager] Story flags reset - hasMetJosh: " + hasMetJosh + ", objectiveIsEscape: " + storyObjectiveIsEscape);
     }
 
-    /**
-     * RESUME existing session - restores progress without reset
-     * This should be called when user clicks "Resume" from menu
-     */
     public void resumeSession() {
         if (!hasActiveSession()) {
             System.err.println("[GameManager] ERROR: No active session to resume!");
             return;
         }
 
-        // Restore player state from session
         currentSession.restoreToPlayer(player);
         currentRoomId = currentSession.getCurrentRoomId();
 
         System.out.println("[GameManager] RESUMED session: " + currentSession);
     }
 
-    /**
-     * Save current progress to session
-     * Call this when pausing or changing rooms
-     */
     public void saveProgressToSession() {
         if (currentSession != null && currentSession.isActive()) {
             currentSession.updateFromPlayer(player, currentRoomId);
         }
     }
 
-    /**
-     * @deprecated Use startNewGame() instead
-     */
+    public void clearSession() {
+        if (currentSession != null) {
+            currentSession.endSession();
+            currentSession = null;
+            System.out.println("[GameManager] Session cleared - no Resume available");
+        }
+    }
+
     @Deprecated
     public void resetNewGame(float virtualWidth, float virtualHeight) {
         startNewGame(virtualWidth, virtualHeight);
@@ -192,11 +173,6 @@ public class GameManager {
         return difficultyStrategy;
     }
 
-    /**
-     * Change difficulty setting.
-     * NOTE: If active session exists, this will NOT take effect until New Game.
-     * Use canChangeDifficulty() and requiresNewGame() to check before calling.
-     */
     public void setDifficulty(GameDifficulty diff) {
         this.difficulty = diff;
         switch (diff) {
@@ -212,28 +188,14 @@ public class GameManager {
         }
     }
 
-    /**
-     * Check if difficulty can be changed freely
-     * 
-     * @return false if active session exists (difficulty is locked)
-     */
     public boolean canChangeDifficultyFreely() {
         return !hasActiveSession();
     }
 
-    /**
-     * Check if changing difficulty requires starting a new game
-     * 
-     * @return true if active session exists
-     */
     public boolean difficultyChangeRequiresNewGame() {
         return hasActiveSession();
     }
 
-    /**
-     * Force difficulty change AND start new game
-     * Use this after user confirms difficulty change popup
-     */
     public void changeDifficultyAndStartNewGame(GameDifficulty newDiff, float virtualWidth, float virtualHeight) {
         setDifficulty(newDiff);
         startNewGame(virtualWidth, virtualHeight);
@@ -264,8 +226,6 @@ public class GameManager {
         return virtualHeight;
     }
 
-    // ------------ TESTING MODE ------------
-
     public boolean isTestingMode() {
         return testingMode;
     }
@@ -273,8 +233,6 @@ public class GameManager {
     public void setTestingMode(boolean testingMode) {
         this.testingMode = testingMode;
     }
-
-    // ------------ GAME STATE SYSTEM ------------
 
     public GameState getCurrentState() {
         return currentState;
@@ -290,83 +248,122 @@ public class GameManager {
     }
 
     public boolean isPlaying() {
-        return currentState == GameState.PLAYING;
+        return currentState == GameState.PLAYING || currentState == GameState.STORY;
     }
 
     public boolean isPaused() {
         return currentState == GameState.PAUSED;
     }
+    
+    public boolean isInStoryMode() {
+        return currentState == GameState.STORY;
+    }
+    
+    public boolean isInFullPlayMode() {
+        return currentState == GameState.PLAYING;
+    }
 
-    // ------------ ROOM DIRECTOR SYSTEM ------------
+    public boolean isInCutscene() {
+        return currentState == GameState.CUTSCENE;
+    }
 
-    /**
-     * Initialize RoomDirector with enemy starting in different room
-     */
+    public boolean isInTutorialState() {
+        return currentState == GameState.STORY && !hasMetJosh;
+    }
+
+    public boolean isInteractionAllowed(String interactionType, String targetId) {
+        if (currentState == GameState.PLAYING) {
+            return true;
+        }
+
+        if (isInTutorialState()) {
+            if ("door".equals(interactionType) && targetId != null) {
+                return targetId.toLowerCase().contains("gym") ||
+                       targetId.toLowerCase().contains("gymnasium");
+            }
+            return false;
+        }
+
+        if (currentState == GameState.CUTSCENE) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public boolean hasMetJosh() {
+        return hasMetJosh;
+    }
+
+    public void setHasMetJosh(boolean met) {
+        this.hasMetJosh = met;
+        if (met) {
+            this.storyObjectiveIsEscape = true;
+        }
+        System.out.println("[Story] Josh encounter: " + met + ", Objective is now ESCAPE: " + storyObjectiveIsEscape);
+    }
+
+    public boolean isObjectiveEscape() {
+        return storyObjectiveIsEscape;
+    }
+
+    public void transitionToFullPlayMode() {
+        if (currentState == GameState.STORY) {
+            setCurrentState(GameState.PLAYING);
+            setHasMetJosh(true);
+            System.out.println("[Story] Transitioned to FULL PLAY mode - all interactions enabled");
+        }
+    }
+
+    // INIT
     private void initializeRoomDirector(RoomId playerStartRoom) {
-        // Enemy starts 2-3 rooms away for fair gameplay
         RoomId enemyStartRoom = getRandomDistantRoom(playerStartRoom);
         roomDirector = new RoomDirector(playerStartRoom, enemyStartRoom);
         roomDirector.setDebugMode(com.fearjosh.frontend.config.Constants.DEBUG_ROOM_DIRECTOR);
 
         System.out.println("[GameManager] RoomDirector initialized: enemy starts in " + enemyStartRoom);
+
+        joshSpawnController = new JoshSpawnController();
+        joshSpawnController.setDebugMode(com.fearjosh.frontend.config.Constants.DEBUG_ROOM_DIRECTOR);
+        System.out.println("[GameManager] JoshSpawnController initialized");
     }
 
-    /**
-     * Get RoomDirector instance
-     */
     public RoomDirector getRoomDirector() {
         return roomDirector;
     }
 
-    /**
-     * Notify RoomDirector when player changes room
-     */
+    public JoshSpawnController getJoshSpawnController() {
+        return joshSpawnController;
+    }
+
     public void notifyPlayerRoomChange(RoomId newRoom) {
+        RoomId previousRoom = currentRoomId;
         if (roomDirector != null) {
             roomDirector.onPlayerEnterRoom(newRoom);
         }
+        if (joshSpawnController != null) {
+            joshSpawnController.onPlayerEnterRoom(newRoom, previousRoom);
+        }
     }
 
-    /**
-    /**
-     * Get a random room that's distant from start (corners of the map)
-     */
     private RoomId getRandomDistantRoom(RoomId start) {
-        // Distant rooms from lobby - far classrooms and gym
-        RoomId[] distantRooms = { 
-            RoomId.GYM,            // Large gym at top
-            RoomId.CLASS_8A,       // Far right top row
-            RoomId.CLASS_8B,       // Far right bottom row
-            RoomId.CLASS_1A        // First classroom top row
-        };
+        RoomId[] distantRooms = { RoomId.CLASS_1A, RoomId.CLASS_8A, RoomId.CLASS_1B, RoomId.CLASS_8B, RoomId.GYM };
 
-        // Filter out the player's starting room and adjacent rooms
+        // FILTER
         java.util.List<RoomId> validRooms = new java.util.ArrayList<>();
         for (RoomId room : distantRooms) {
-            if (room != start && !isAdjacent(room, start)) {
+            if (room != start) {
                 validRooms.add(room);
             }
         }
 
         if (validRooms.isEmpty()) {
-            // Fallback to GYM if player somehow starts near all distant rooms
-            return RoomId.GYM;
+            return RoomId.HALLWAY;
         }
 
-        // Return random distant room
         int randomIndex = (int) (Math.random() * validRooms.size());
         return validRooms.get(randomIndex);
     }
-    
-    /**
-     * Check if two rooms are adjacent (share a door)
-     */
-    private boolean isAdjacent(RoomId a, RoomId b) {
-        if (a == null || b == null) return false;
-        return a.up() == b || a.down() == b || a.left() == b || a.right() == b;
-    }
-
-    // ------------ HEALTH/LIVES SYSTEM ------------
 
     public int getCurrentLives() {
         return currentLives;
@@ -376,11 +373,6 @@ public class GameManager {
         return maxLives;
     }
 
-    /**
-     * Player loses a life (called when caught by Josh)
-     * 
-     * @return true if game over (no more lives)
-     */
     public boolean loseLife() {
         currentLives--;
         System.out.println("[Health] Life lost! Remaining: " + currentLives);
@@ -390,12 +382,9 @@ public class GameManager {
             return true; // Game over
         }
 
-        return false; // Player can continue
+        return false;
     }
 
-    /**
-     * Restore one life (for pickup items, etc)
-     */
     public void gainLife() {
         if (currentLives < maxLives) {
             currentLives++;
@@ -403,21 +392,10 @@ public class GameManager {
         }
     }
 
-    /**
-     * Check if game is over (no lives left)
-     * 
-     * // ------------ INVENTORY SYSTEM ------------
-     * 
-     * /**
-     * Get player's inventory
-     */
     public Inventory getInventory() {
         return inventory;
     }
 
-    /**
-     * Reset inventory (clear all items)
-     */
     public void resetInventory() {
         if (inventory != null) {
             inventory.clear();

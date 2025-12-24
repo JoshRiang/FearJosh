@@ -12,6 +12,8 @@
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="FearJosh_Frontend.core.main" options="-Xlint:-unchecked -Xlint:-deprecation" />
+      <module name="FearJosh_Frontend.lwjgl3.main" options="-Xlint:-unchecked -Xlint:-deprecation" />
       <module name="fearjosh-backend" options="-parameters" />
     </option>
   </component>

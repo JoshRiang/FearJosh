@@ -6,28 +6,24 @@ import com.badlogic.gdx.audio.Sound;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * AudioManager - Singleton untuk manage semua audio dalam game
- * Handles background music, sound effects, dan volume control
- */
 public class AudioManager {
 
     private static AudioManager INSTANCE;
 
-    // Volume settings (0.0 to 1.0)
+    // Volume
     private float masterVolume = 1.0f;
     private float musicVolume = 0.7f;
     private float sfxVolume = 0.8f;
 
-    // Audio caches
+    // Caches
     private Map<String, Music> musicCache = new HashMap<>();
     private Map<String, Sound> soundCache = new HashMap<>();
 
-    // Current playing music
+    // Current music
     private Music currentMusic;
     private String currentMusicPath;
 
-    // Mute states
+    // Mute
     private boolean musicMuted = false;
     private boolean sfxMuted = false;
 
@@ -41,31 +37,22 @@ public class AudioManager {
         return INSTANCE;
     }
 
-    // ============ MUSIC METHODS ============
+    // MUSIC
 
-    /**
-     * Play background music (looping)
-     * 
-     * @param musicPath Path to music file (e.g., "Audio/Music/ambient.mp3")
-     * @param loop      Whether to loop the music
-     */
     public void playMusic(String musicPath, boolean loop) {
         if (musicMuted)
             return;
 
-        // Check if file exists first
         if (!Gdx.files.internal(musicPath).exists()) {
             System.err.println("[AudioManager] Music file not found: " + musicPath);
             System.err.println("[AudioManager] Please add the file to assets folder");
             return;
         }
 
-        // Stop current music if different
         if (currentMusic != null && !musicPath.equals(currentMusicPath)) {
             currentMusic.stop();
         }
 
-        // Load and play new music
         try {
             Music music = musicCache.get(musicPath);
             if (music == null) {
@@ -87,9 +74,6 @@ public class AudioManager {
         }
     }
 
-    /**
-     * Stop current music
-     */
     public void stopMusic() {
         if (currentMusic != null) {
             currentMusic.stop();
@@ -98,64 +82,36 @@ public class AudioManager {
         }
     }
 
-    /**
-     * Get the path of currently playing music
-     * 
-     * @return Current music path, or null if no music is playing
-     */
     public String getCurrentMusicPath() {
         return currentMusicPath;
     }
 
-    /**
-     * Pause current music
-     */
     public void pauseMusic() {
         if (currentMusic != null && currentMusic.isPlaying()) {
             currentMusic.pause();
         }
     }
 
-    /**
-     * Resume paused music
-     */
     public void resumeMusic() {
         if (currentMusic != null && !currentMusic.isPlaying()) {
             currentMusic.play();
         }
     }
 
-    /**
-     * Check if music is currently playing
-     */
     public boolean isMusicPlaying() {
         return currentMusic != null && currentMusic.isPlaying();
     }
 
-    // ============ SOUND EFFECTS METHODS ============
+    // SFX
 
-    /**
-     * Play sound effect once
-     * 
-     * @param soundPath Path to sound file (e.g., "Audio/SFX/footstep.wav")
-     * @return Sound ID for controlling playback
-     */
     public long playSound(String soundPath) {
         return playSound(soundPath, 1.0f);
     }
 
-    /**
-     * Play sound effect with custom volume multiplier
-     * 
-     * @param soundPath        Path to sound file
-     * @param volumeMultiplier Volume multiplier (0.0 to 1.0)
-     * @return Sound ID for controlling playback
-     */
     public long playSound(String soundPath, float volumeMultiplier) {
         if (sfxMuted)
             return -1;
 
-        // Check if file exists first
         if (!Gdx.files.internal(soundPath).exists()) {
             System.err.println("[AudioManager] Sound file not found: " + soundPath);
             return -1;
@@ -177,17 +133,10 @@ public class AudioManager {
         }
     }
 
-    /**
-     * Play looping sound effect
-     * 
-     * @param soundPath Path to sound file
-     * @return Sound ID for controlling playback
-     */
     public long loopSound(String soundPath) {
         if (sfxMuted)
             return -1;
 
-        // Check if file exists first
         if (!Gdx.files.internal(soundPath).exists()) {
             System.err.println("[AudioManager] Sound file not found: " + soundPath);
             return -1;
@@ -209,9 +158,6 @@ public class AudioManager {
         }
     }
 
-    /**
-     * Stop specific sound instance
-     */
     public void stopSound(String soundPath, long soundId) {
         Sound sound = soundCache.get(soundPath);
         if (sound != null) {
@@ -219,9 +165,6 @@ public class AudioManager {
         }
     }
 
-    /**
-     * Stop all instances of a sound
-     */
     public void stopAllSounds(String soundPath) {
         Sound sound = soundCache.get(soundPath);
         if (sound != null) {
@@ -229,7 +172,7 @@ public class AudioManager {
         }
     }
 
-    // ============ VOLUME CONTROL ============
+    // VOLUME CONTROL
 
     public void setMasterVolume(float volume) {
         this.masterVolume = Math.max(0f, Math.min(1f, volume));
@@ -263,7 +206,7 @@ public class AudioManager {
         return sfxVolume;
     }
 
-    // ============ MUTE CONTROL ============
+    // MUTE CONTROL
 
     public void setMusicMuted(boolean muted) {
         this.musicMuted = muted;
@@ -286,19 +229,14 @@ public class AudioManager {
         return sfxMuted;
     }
 
-    // ============ CLEANUP ============
+    // CLEANUP
 
-    /**
-     * Dispose all audio resources
-     */
     public void dispose() {
-        // Dispose all music
         for (Music music : musicCache.values()) {
             music.dispose();
         }
         musicCache.clear();
 
-        // Dispose all sounds
         for (Sound sound : soundCache.values()) {
             sound.dispose();
         }
